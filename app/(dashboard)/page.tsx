@@ -1,0 +1,170 @@
+import { createClient } from "@/lib/supabase/server";
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { CashflowChart } from "@/components/dashboard/CashflowChart";
+import { UpcomingPayments } from "@/components/dashboard/UpcomingPayments";
+import { OverdueAlerts } from "@/components/dashboard/OverdueAlerts";
+import { calculateCashflow } from "@/lib/utils/cashflow";
+import { getPaymentsInRange, getMonthRange, getCurrentMonthRange } from "@/lib/utils/dates";
+import { addDays, addMonths, endOfDay, format, parseISO, isValid, startOfDay, startOfMonth } from "date-fns";
+import type { CalendarEvent, Invoice } from "@/types";
+
+/**
+ * Dashboard principal — muestra KPIs financieros del mes actual,
+ * próximos pagos/cobros y gráfico de cashflow histórico.
+ */
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const lookbackDate = format(startOfMonth(addMonths(new Date(), -5)), "yyyy-MM-dd");
+
+  // Cargar todos los datos necesarios en paralelo
+  const [
+    expensesRes,
+    expenseTransactionsRes,
+    invoicesRes,
+    incomeTransactionsRes,
+  ] = await Promise.all([
+    supabase
+      .from("company_expenses")
+      .select("id,name,amount,currency,status,interval,billing_day,billing_date,start_date,end_date")
+      .eq("status", "active"),
+    supabase
+      .from("expense_transactions")
+      .select("id,date,status,amount")
+      .gte("date", lookbackDate)
+      .order("date", { ascending: false }),
+    supabase
+      .from("invoices")
+      .select("id,invoice_number,total,currency,due_date,status,client:clients(name)")
+      .or(`status.eq.overdue,due_date.gte.${lookbackDate}`)
+      .order("due_date", { ascending: true }),
+    supabase
+      .from("income_transactions")
+      .select("id,date,amount")
+      .gte("date", lookbackDate)
+      .order("date", { ascending: false }),
+  ]);
+
+  const expenses = expensesRes.data ?? [];
+  const expenseTransactions = expenseTransactionsRes.data ?? [];
+  const invoices = (invoicesRes.data ?? []) as unknown as Invoice[];
+  const incomeTransactions = incomeTransactionsRes.data ?? [];
+
+  // --- Calcular stats del mes actual ---
+  const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+
+  // Ingresos previstos: facturas pending/sent con due_date en el mes actual
+  const incomeExpected = invoices
+    .filter((inv) => {
+      if (!["pending", "sent"].includes(inv.status)) return false;
+      const due = parseISO(inv.due_date);
+      return isValid(due) && due >= monthStart && due <= monthEnd;
+    })
+    .reduce((sum, inv) => sum + (inv.total ?? 0), 0);
+
+  // Ingresos reales: cobros registrados este mes
+  const incomeReal = incomeTransactions
+    .filter((t) => {
+      const d = parseISO(t.date);
+      return isValid(d) && d >= monthStart && d <= monthEnd;
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Gastos previstos: company_expenses con pagos este mes
+  const expenseExpected = expenses.reduce((sum, exp) => {
+    const payments = getPaymentsInRange(exp as any, monthStart, monthEnd);
+    return sum + payments.length * exp.amount;
+  }, 0);
+
+  // Gastos reales: transacciones pagadas este mes
+  const expenseReal = expenseTransactions
+    .filter((t) => {
+      const d = parseISO(t.date);
+      return isValid(d) && d >= monthStart && d <= monthEnd && t.status === "paid";
+    })
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // --- Cashflow de los últimos 6 meses ---
+  const months = getMonthRange(5, 0); // 5 meses atrás + mes actual
+  const cashflowData = calculateCashflow(months, {
+    expenses: expenses as any,
+    expenseTransactions: expenseTransactions as any,
+    invoices,
+    incomeTransactions: incomeTransactions as any,
+  });
+
+  // --- Próximos 7 días (pagos y cobros) ---
+  const today = startOfDay(new Date());
+  const nextWeek = endOfDay(addDays(today, 7));
+  const upcomingEvents: CalendarEvent[] = [];
+
+  // Pagos previstos próximos 7 días
+  for (const expense of expenses) {
+    const payments = getPaymentsInRange(expense as any, today, nextWeek);
+    payments.forEach((date) => {
+      upcomingEvents.push({
+        id: `exp-${expense.id}-${date.toISOString()}`,
+        type: "payment",
+        title: expense.name,
+        amount: expense.amount,
+        currency: expense.currency as any,
+        date: date.toISOString().split("T")[0],
+        status: "pending",
+        sourceId: expense.id,
+        sourceType: "company_expense",
+      });
+    });
+  }
+
+  // Cobros previstos: facturas pending/sent con due_date en los próximos 7 días
+  invoices
+    .filter((inv) => {
+      if (!["pending", "sent"].includes(inv.status)) return false;
+      const due = parseISO(inv.due_date);
+      return isValid(due) && due >= today && due <= nextWeek;
+    })
+    .forEach((inv) => {
+      upcomingEvents.push({
+        id: `inv-${inv.id}`,
+        type: "income",
+        title: `${inv.client?.name ?? "Cliente"} — ${inv.invoice_number}`,
+        amount: inv.total ?? 0,
+        currency: inv.currency as any,
+        date: inv.due_date,
+        status: inv.status,
+        sourceId: inv.id,
+        sourceType: "invoice",
+      });
+    });
+
+  // --- Facturas vencidas ---
+  const overdueInvoices = invoices.filter((inv) => inv.status === "overdue");
+
+  return (
+    <div className="space-y-6">
+      {/* Alertas de facturas vencidas (si las hay) */}
+      {overdueInvoices.length > 0 && (
+        <OverdueAlerts overdueInvoices={overdueInvoices} />
+      )}
+
+      {/* KPIs del mes */}
+      <StatsCards
+        incomeExpected={incomeExpected}
+        incomeReal={incomeReal}
+        expenseExpected={expenseExpected}
+        expenseReal={expenseReal}
+        netExpected={incomeExpected - expenseExpected}
+        netReal={incomeReal - expenseReal}
+      />
+
+      {/* Fila: gráfico + próximos pagos */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <CashflowChart data={cashflowData} />
+        </div>
+        <div className="lg:col-span-2">
+          <UpcomingPayments events={upcomingEvents} />
+        </div>
+      </div>
+    </div>
+  );
+}
