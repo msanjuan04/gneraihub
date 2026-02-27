@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Loader2, Save, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { createInvoice, updateInvoice } from "@/app/(dashboard)/facturas/actions";
 import { formatCurrency } from "@/lib/utils/currency";
+import { formatDate } from "@/lib/utils/dates";
 import type { Client, Invoice, Project } from "@/types";
 
 const invoiceSchema = z.object({
@@ -24,6 +24,7 @@ const invoiceSchema = z.object({
   concept: z.string().min(1, "El concepto es obligatorio"),
   amount: z.coerce.number().positive("El importe debe ser positivo"),
   tax_rate: z.coerce.number().min(0).max(100).default(21),
+  irpf_rate: z.coerce.number().min(0).max(100).default(0),
   currency: z.enum(["EUR", "USD", "GBP"]).default("EUR"),
   issue_date: z.string().min(1, "La fecha de emisión es obligatoria"),
   due_date: z.string().min(1, "La fecha de vencimiento es obligatoria"),
@@ -40,6 +41,7 @@ type InvoiceFormData = {
   concept: string;
   amount: number;
   tax_rate: number;
+  irpf_rate: number;
   currency: "EUR" | "USD" | "GBP";
   issue_date: string;
   due_date: string;
@@ -54,6 +56,22 @@ interface InvoiceFormProps {
   projects: Project[];
 }
 
+const paymentMethodLabel: Record<string, string> = {
+  transfer: "Transferencia",
+  card: "Tarjeta",
+  direct_debit: "Domiciliación",
+  cash: "Efectivo",
+  otro: "Otro",
+};
+
+const statusLabel: Record<string, string> = {
+  pending: "Pendiente",
+  sent: "Enviada",
+  paid: "Pagada",
+  overdue: "Vencida",
+  cancelled: "Cancelada",
+};
+
 export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -65,17 +83,18 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
     return `GNR-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, "0")}`;
   };
 
-  const { register, handleSubmit, setValue, watch, control, formState: { errors } } = useForm<InvoiceFormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema) as any,
     defaultValues: {
-      invoice_number: invoice?.invoice_number ?? generateInvoiceNumber(),
+      invoice_number: invoice?.invoice_number ?? "",
       client_id: invoice?.client_id ?? "",
       project_id: invoice?.project_id ?? null,
       concept: invoice?.concept ?? "",
       amount: invoice?.amount ?? 0,
       tax_rate: invoice?.tax_rate ?? 21,
+      irpf_rate: invoice?.irpf_rate ?? 0,
       currency: (invoice?.currency as any) ?? "EUR",
-      issue_date: invoice?.issue_date ?? new Date().toISOString().split("T")[0],
+      issue_date: invoice?.issue_date ?? "",
       due_date: invoice?.due_date ?? "",
       status: (invoice?.status as any) ?? "pending",
       payment_method: (invoice?.payment_method as any) ?? null,
@@ -83,10 +102,33 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
     },
   });
 
-  const amount = watch("amount") || 0;
-  const taxRate = watch("tax_rate") ?? 21;
+  useEffect(() => {
+    if (isEditing) return;
+    setValue("invoice_number", generateInvoiceNumber(), { shouldDirty: false });
+    setValue("issue_date", new Date().toISOString().split("T")[0], { shouldDirty: false });
+  }, [isEditing, setValue]);
+
+  const amountRaw = Number(watch("amount") ?? 0);
+  const taxRateRaw = Number(watch("tax_rate") ?? 21);
+  const irpfRateRaw = Number(watch("irpf_rate") ?? 0);
+  const amount = Number.isFinite(amountRaw) ? amountRaw : 0;
+  const taxRate = Number.isFinite(taxRateRaw) ? taxRateRaw : 21;
+  const irpfRate = Number.isFinite(irpfRateRaw) ? irpfRateRaw : 0;
   const taxAmount = (amount * taxRate) / 100;
-  const total = amount + taxAmount;
+  const irpfAmount = (amount * irpfRate) / 100;
+  const total = amount + taxAmount - irpfAmount;
+  const currency = watch("currency") || "EUR";
+  const clientId = watch("client_id");
+  const projectId = watch("project_id");
+  const concept = watch("concept");
+  const issueDate = watch("issue_date");
+  const dueDate = watch("due_date");
+  const paymentMethod = watch("payment_method");
+  const status = watch("status");
+  const notes = watch("notes");
+
+  const selectedClient = clients.find((c) => c.id === clientId);
+  const selectedProject = projects.find((p) => p.id === projectId);
 
   const onSubmit = async (data: InvoiceFormData) => {
     setLoading(true);
@@ -112,10 +154,11 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
-      <Card>
-        <CardHeader><CardTitle className="text-base">Datos de la factura</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 w-full">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Datos de la factura</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="invoice_number">Número de factura *</Label>
             <Input id="invoice_number" {...register("invoice_number")} />
@@ -191,17 +234,17 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Cálculo de importes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calculator className="h-4 w-4" />Importes
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-3">
+        {/* Cálculo de importes */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calculator className="h-4 w-4" />Importes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="amount">Base imponible *</Label>
             <div className="flex gap-2">
@@ -232,6 +275,18 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="irpf_rate">IRPF (%)</Label>
+            <Select defaultValue={String(invoice?.irpf_rate ?? 0)} onValueChange={(v) => setValue("irpf_rate", Number(v))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">0% (sin retención)</SelectItem>
+                <SelectItem value="7">7%</SelectItem>
+                <SelectItem value="15">15%</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label>Total (calculado)</Label>
             <div className="h-10 flex items-center px-3 rounded-md border border-border bg-muted/50">
               <span className="font-bold text-income text-base">{formatCurrency(total || 0)}</span>
@@ -239,21 +294,95 @@ export function InvoiceForm({ invoice, clients, projects }: InvoiceFormProps) {
           </div>
 
           {amount > 0 && (
-            <div className="sm:col-span-3 flex gap-6 text-xs text-muted-foreground border-t border-border pt-3">
+            <div className="sm:col-span-4 flex flex-wrap gap-6 text-xs text-muted-foreground border-t border-border pt-3">
               <span>Base: {formatCurrency(amount)}</span>
               <span>IVA {taxRate}%: +{formatCurrency(taxAmount)}</span>
+              <span>IRPF {irpfRate}%: -{formatCurrency(irpfAmount)}</span>
               <span className="font-semibold text-foreground">Total: {formatCurrency(total)}</span>
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <div className="flex gap-3">
-        <Button type="submit" variant="gnerai" disabled={loading}>
-          {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Guardando...</> : <><Save className="h-4 w-4" />{isEditing ? "Guardar cambios" : "Crear factura"}</>}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading}>Cancelar</Button>
-      </div>
-    </form>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button type="submit" variant="gnerai" disabled={loading} className="w-full sm:w-auto">
+            {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Guardando...</> : <><Save className="h-4 w-4" />{isEditing ? "Guardar cambios" : "Crear factura"}</>}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading} className="w-full sm:w-auto">Cancelar</Button>
+        </div>
+      </form>
+
+      <aside className="hidden xl:block">
+        <Card className="sticky top-24">
+          <CardHeader>
+            <CardTitle className="text-base">Previsualización</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Factura</p>
+              <p className="font-medium break-words">{watch("invoice_number") || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Cliente</p>
+              <p className="font-medium break-words">{selectedClient?.name ?? "Sin cliente"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Proyecto</p>
+              <p className="font-medium break-words">{selectedProject?.name ?? "Sin proyecto"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Concepto</p>
+              <p className="font-medium break-words">{concept || "Sin concepto"}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Emisión</p>
+                <p className="font-medium">{issueDate ? formatDate(issueDate) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Vencimiento</p>
+                <p className="font-medium">{dueDate ? formatDate(dueDate) : "—"}</p>
+              </div>
+            </div>
+            <div className="rounded-md border border-border p-3 bg-muted/20 space-y-1.5">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Base</span>
+                <span>{formatCurrency(amount, currency)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>IVA ({taxRate}%)</span>
+                <span>{formatCurrency(taxAmount, currency)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>IRPF ({irpfRate}%)</span>
+                <span>-{formatCurrency(irpfAmount, currency)}</span>
+              </div>
+              <div className="flex items-center justify-between font-semibold text-income pt-1 border-t border-border/60">
+                <span>Total</span>
+                <span>{formatCurrency(total, currency)}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Método</p>
+                <p className="font-medium">{paymentMethod ? paymentMethodLabel[paymentMethod] : "—"}</p>
+              </div>
+              {isEditing && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Estado</p>
+                  <p className="font-medium">{status ? statusLabel[status] : "—"}</p>
+                </div>
+              )}
+            </div>
+            {notes && (
+              <div>
+                <p className="text-xs text-muted-foreground">Notas</p>
+                <p className="text-muted-foreground break-words">{notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </aside>
+    </div>
   );
 }

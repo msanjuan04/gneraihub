@@ -34,14 +34,15 @@ export default async function ProyectosPage() {
     projectIds.length > 0
       ? supabase
           .from("saas_subscriptions")
-          .select("project_id, status, plan:saas_plans(billing_type, fee, setup_fee, currency)")
+          .select("project_id, status, is_free, plan:saas_plans(billing_type, fee, setup_fee, currency)")
           .in("project_id", projectIds)
       : Promise.resolve({ data: [] }),
   ]);
 
   // Agrupar ingresos por proyecto
-  const incomeByProject = ((incomeResult as any).data ?? []).reduce<Record<string, number>>(
-    (acc: Record<string, number>, t: any) => {
+  const incomeRows = ((incomeResult as any).data ?? []) as Array<{ project_id: string | null; amount: number }>;
+  const incomeByProject = incomeRows.reduce(
+    (acc: Record<string, number>, t) => {
       if (t.project_id) acc[t.project_id] = (acc[t.project_id] ?? 0) + t.amount;
       return acc;
     },
@@ -49,14 +50,13 @@ export default async function ProyectosPage() {
   );
 
   // Agrupar suscripciones por proyecto — MRR normalizado a mensual
-  const subsByProject = ((subsResult as any).data ?? []).reduce<
-    Record<string, { active: number; mrr: number; currency: string }>
-  >((acc: any, s: any) => {
+  const subsRows = ((subsResult as any).data ?? []) as any[];
+  const subsByProject = subsRows.reduce((acc: Record<string, { active: number; mrr: number; currency: string }>, s: any) => {
     if (!acc[s.project_id]) acc[s.project_id] = { active: 0, mrr: 0, currency: "EUR" };
     if (s.status === "active") {
       acc[s.project_id].active += 1;
       // Calcular MRR según billing_type del plan
-      if (s.plan) acc[s.project_id].mrr += planMrr(s.plan as SaasPlan);
+      if (!s.is_free && s.plan) acc[s.project_id].mrr += planMrr(s.plan as SaasPlan);
       if (s.plan?.currency) acc[s.project_id].currency = s.plan.currency;
     }
     return acc;

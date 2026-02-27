@@ -5,8 +5,23 @@ import { UpcomingPayments } from "@/components/dashboard/UpcomingPayments";
 import { OverdueAlerts } from "@/components/dashboard/OverdueAlerts";
 import { calculateCashflow } from "@/lib/utils/cashflow";
 import { getPaymentsInRange, getMonthRange, getCurrentMonthRange } from "@/lib/utils/dates";
+import { getMensualidadDueInRange } from "@/lib/utils/mensualidades";
 import { addDays, addMonths, endOfDay, format, parseISO, isValid, startOfDay, startOfMonth } from "date-fns";
-import type { CalendarEvent, Invoice } from "@/types";
+import type { CalendarEvent, Invoice, MensualidadPayment } from "@/types";
+
+type DashboardMensualidad = {
+  id: string;
+  name: string;
+  billing_type: "monthly" | "annual" | "setup_monthly" | "setup_annual";
+  fee: number;
+  setup_fee: number | null;
+  currency: "EUR" | "USD" | "GBP";
+  status: "active" | "paused" | "cancelled";
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+  client?: { name: string } | null;
+};
 
 /**
  * Dashboard principal — muestra KPIs financieros del mes actual,
@@ -22,6 +37,8 @@ export default async function DashboardPage() {
     expenseTransactionsRes,
     invoicesRes,
     incomeTransactionsRes,
+    mensualidadesRes,
+    mensualidadPaymentsRes,
   ] = await Promise.all([
     supabase
       .from("company_expenses")
@@ -42,18 +59,37 @@ export default async function DashboardPage() {
       .select("id,date,amount")
       .gte("date", lookbackDate)
       .order("date", { ascending: false }),
+    supabase
+      .from("mensualidades")
+      .select("id,name,billing_type,fee,setup_fee,currency,status,start_date,end_date,created_at,client:clients(name)")
+      .eq("status", "active"),
+    supabase
+      .from("mensualidad_payments")
+      .select("id,mensualidad_id,payment_date,amount,currency,is_setup")
+      .gte("payment_date", lookbackDate)
+      .order("payment_date", { ascending: false }),
   ]);
 
   const expenses = expensesRes.data ?? [];
   const expenseTransactions = expenseTransactionsRes.data ?? [];
   const invoices = (invoicesRes.data ?? []) as unknown as Invoice[];
   const incomeTransactions = incomeTransactionsRes.data ?? [];
+  const mensualidades = (mensualidadesRes.data ?? []) as unknown as DashboardMensualidad[];
+  const mensualidadPayments = (mensualidadPaymentsRes.data ?? []) as MensualidadPayment[];
+  const mensualidadPaymentsByMensualidad = mensualidadPayments.reduce<Record<string, MensualidadPayment[]>>(
+    (acc, payment) => {
+      acc[payment.mensualidad_id] = acc[payment.mensualidad_id] ?? [];
+      acc[payment.mensualidad_id].push(payment);
+      return acc;
+    },
+    {}
+  );
 
   // --- Calcular stats del mes actual ---
   const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
 
   // Ingresos previstos: facturas pending/sent con due_date en el mes actual
-  const incomeExpected = invoices
+  const invoiceIncomeExpected = invoices
     .filter((inv) => {
       if (!["pending", "sent"].includes(inv.status)) return false;
       const due = parseISO(inv.due_date);
@@ -61,13 +97,34 @@ export default async function DashboardPage() {
     })
     .reduce((sum, inv) => sum + (inv.total ?? 0), 0);
 
+  const mensualidadIncomeExpected = mensualidades.reduce((sum, mensualidad) => {
+    const dueList = getMensualidadDueInRange(
+      mensualidad,
+      mensualidadPaymentsByMensualidad[mensualidad.id] ?? [],
+      monthStart,
+      monthEnd
+    );
+    return sum + dueList.reduce((dueSum, due) => dueSum + due.expectedAmount, 0);
+  }, 0);
+
+  const incomeExpected = invoiceIncomeExpected + mensualidadIncomeExpected;
+
   // Ingresos reales: cobros registrados este mes
-  const incomeReal = incomeTransactions
+  const invoiceIncomeReal = incomeTransactions
     .filter((t) => {
       const d = parseISO(t.date);
       return isValid(d) && d >= monthStart && d <= monthEnd;
     })
     .reduce((sum, t) => sum + t.amount, 0);
+
+  const mensualidadIncomeReal = mensualidadPayments
+    .filter((payment) => {
+      const d = parseISO(payment.payment_date);
+      return isValid(d) && d >= monthStart && d <= monthEnd;
+    })
+    .reduce((sum, payment) => sum + payment.amount, 0);
+
+  const incomeReal = invoiceIncomeReal + mensualidadIncomeReal;
 
   // Gastos previstos: company_expenses con pagos este mes
   const expenseExpected = expenses.reduce((sum, exp) => {
@@ -90,6 +147,8 @@ export default async function DashboardPage() {
     expenseTransactions: expenseTransactions as any,
     invoices,
     incomeTransactions: incomeTransactions as any,
+    mensualidades: mensualidades as any,
+    mensualidadPayments: mensualidadPayments as any,
   });
 
   // --- Próximos 7 días (pagos y cobros) ---
@@ -111,6 +170,30 @@ export default async function DashboardPage() {
         status: "pending",
         sourceId: expense.id,
         sourceType: "company_expense",
+      });
+    });
+  }
+
+  // Cobros previstos de mensualidades en los próximos 7 días
+  for (const mensualidad of mensualidades as any[]) {
+    const dueList = getMensualidadDueInRange(
+      mensualidad,
+      mensualidadPaymentsByMensualidad[mensualidad.id] ?? [],
+      today,
+      nextWeek
+    );
+
+    dueList.forEach((due) => {
+      upcomingEvents.push({
+        id: `mensualidad-${mensualidad.id}-${due.dueDate.toISOString()}`,
+        type: "income",
+        title: `${mensualidad.client?.name ?? "Cliente"} — ${mensualidad.name}`,
+        amount: due.expectedAmount,
+        currency: mensualidad.currency as any,
+        date: due.dueDate.toISOString().split("T")[0],
+        status: "pending",
+        sourceId: mensualidad.id,
+        sourceType: "mensualidad",
       });
     });
   }

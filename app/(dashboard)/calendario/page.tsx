@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { CalendarView } from "@/components/calendario/CalendarView";
 import { getPaymentsInRange } from "@/lib/utils/dates";
+import { getMensualidadDueInRange } from "@/lib/utils/mensualidades";
 import { parseISO, isValid, startOfMonth, endOfMonth } from "date-fns";
 import type { CalendarEvent } from "@/types";
 
@@ -22,7 +23,18 @@ export default async function CalendarioPage({
   const rangeStart = startOfMonth(new Date(year, month, 1));
   const rangeEnd = endOfMonth(rangeStart);
 
-  const [expensesRes, invoicesRes, expenseTransactionsRes, incomeTransactionsRes] = await Promise.all([
+  const rangeStartISO = rangeStart.toISOString().split("T")[0];
+  const rangeEndISO = rangeEnd.toISOString().split("T")[0];
+
+  const [
+    expensesRes,
+    invoicesRes,
+    expenseTransactionsRes,
+    incomeTransactionsRes,
+    mensualidadesRes,
+    mensualidadPaymentsRes,
+    mensualidadPaymentsRangeRes,
+  ] = await Promise.all([
     supabase
       .from("company_expenses")
       .select("id,name,amount,currency,status,interval,billing_day,billing_date,start_date,end_date")
@@ -30,24 +42,48 @@ export default async function CalendarioPage({
     supabase
       .from("invoices")
       .select("id,invoice_number,total,currency,due_date,status,client:clients(name)")
-      .gte("due_date", rangeStart.toISOString().split("T")[0])
-      .lte("due_date", rangeEnd.toISOString().split("T")[0]),
+      .gte("due_date", rangeStartISO)
+      .lte("due_date", rangeEndISO),
     supabase
       .from("expense_transactions")
       .select("id,name,amount,currency,date,status")
-      .gte("date", rangeStart.toISOString().split("T")[0])
-      .lte("date", rangeEnd.toISOString().split("T")[0]),
+      .gte("date", rangeStartISO)
+      .lte("date", rangeEndISO),
     supabase
       .from("income_transactions")
       .select("id,concept,amount,currency,date")
-      .gte("date", rangeStart.toISOString().split("T")[0])
-      .lte("date", rangeEnd.toISOString().split("T")[0]),
+      .gte("date", rangeStartISO)
+      .lte("date", rangeEndISO),
+    supabase
+      .from("mensualidades")
+      .select("id,name,billing_type,fee,setup_fee,currency,status,start_date,end_date,created_at,client:clients(name)")
+      .eq("status", "active"),
+    supabase
+      .from("mensualidad_payments")
+      .select("mensualidad_id,payment_date,is_setup")
+      .lte("payment_date", rangeEndISO),
+    supabase
+      .from("mensualidad_payments")
+      .select("id,mensualidad_id,payment_date,amount,currency,mensualidad:mensualidades(name),client:clients(name)")
+      .gte("payment_date", rangeStartISO)
+      .lte("payment_date", rangeEndISO),
   ]);
 
   const expenses = expensesRes.data ?? [];
   const invoices = (invoicesRes.data ?? []) as any[];
   const expenseTransactions = expenseTransactionsRes.data ?? [];
   const incomeTransactions = incomeTransactionsRes.data ?? [];
+  const mensualidades = (mensualidadesRes.data ?? []) as any[];
+  const mensualidadPayments = (mensualidadPaymentsRes.data ?? []) as any[];
+  const mensualidadPaymentsInMonth = (mensualidadPaymentsRangeRes.data ?? []) as any[];
+  const mensualidadPaymentsByMensualidad = mensualidadPayments.reduce<Record<string, any[]>>(
+    (acc, payment) => {
+      acc[payment.mensualidad_id] = acc[payment.mensualidad_id] ?? [];
+      acc[payment.mensualidad_id].push(payment);
+      return acc;
+    },
+    {}
+  );
 
   // Construir eventos del calendario
   const events: CalendarEvent[] = [];
@@ -87,6 +123,30 @@ export default async function CalendarioPage({
       });
     });
 
+  // Cobros previstos de mensualidades
+  mensualidades.forEach((mensualidad) => {
+    const dueList = getMensualidadDueInRange(
+      mensualidad,
+      mensualidadPaymentsByMensualidad[mensualidad.id] ?? [],
+      rangeStart,
+      rangeEnd
+    );
+
+    dueList.forEach((due) => {
+      events.push({
+        id: `mensualidad-${mensualidad.id}-${due.dueDate.toISOString()}`,
+        type: "income",
+        title: `${mensualidad.client?.name ?? "Cliente"} — ${mensualidad.name}`,
+        amount: due.expectedAmount,
+        currency: mensualidad.currency,
+        date: due.dueDate.toISOString().split("T")[0],
+        status: due.isOverdue ? "overdue" : "pending",
+        sourceId: mensualidad.id,
+        sourceType: "mensualidad",
+      });
+    });
+  });
+
   // Pagos reales registrados
   expenseTransactions.forEach((t: any) => {
     events.push({
@@ -114,6 +174,21 @@ export default async function CalendarioPage({
       status: "paid",
       sourceId: t.id,
       sourceType: "income_transaction",
+    });
+  });
+
+  // Cobros reales de mensualidades
+  mensualidadPaymentsInMonth.forEach((payment: any) => {
+    events.push({
+      id: `mensualidad-paid-${payment.id}`,
+      type: "paid_income",
+      title: `${payment.client?.name ?? "Cliente"} — ${payment.mensualidad?.name ?? "Mensualidad"}`,
+      amount: payment.amount,
+      currency: payment.currency,
+      date: payment.payment_date,
+      status: "paid",
+      sourceId: payment.id,
+      sourceType: "mensualidad_payment",
     });
   });
 

@@ -58,6 +58,16 @@ function hasSetupFee(bt: SaasBillingType) {
   return bt === "setup_monthly" || bt === "setup_annual";
 }
 
+function getBaseBillingType(bt: SaasBillingType): SaasBillingType {
+  return bt === "annual" || bt === "setup_annual" ? "annual" : "monthly";
+}
+
+function parseAmount(value: string): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return 0;
+  return amount;
+}
+
 export function SaasPlansManager({ projectId, plans: initialPlans, currency }: Props) {
   const [plans, setPlans] = useState(initialPlans);
   const [adding, setAdding] = useState(false);
@@ -68,16 +78,16 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
   const [editForm, setEditForm] = useState<PlanForm | null>(null);
 
   const handleAdd = async () => {
-    if (!form.name || !form.fee) return;
+    const fee = parseAmount(form.fee);
+    const setupFee = parseAmount(form.setup_fee);
+    if (!form.name || (fee <= 0 && setupFee <= 0)) return;
     setLoading(true);
     const result = await createSaasPlan({
       project_id: projectId,
       name: form.name,
-      billing_type: form.billing_type,
-      fee: parseFloat(form.fee),
-      setup_fee: hasSetupFee(form.billing_type) && form.setup_fee
-        ? parseFloat(form.setup_fee)
-        : null,
+      billing_type: getBaseBillingType(form.billing_type),
+      fee,
+      setup_fee: setupFee > 0 ? setupFee : null,
       currency: form.currency,
       description: form.description || null,
     });
@@ -94,14 +104,15 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
 
   const handleEdit = async (id: string) => {
     if (!editForm) return;
+    const fee = parseAmount(editForm.fee);
+    const setupFee = parseAmount(editForm.setup_fee);
+    if (!editForm.name || (fee <= 0 && setupFee <= 0)) return;
     setLoading(true);
     const result = await updateSaasPlan(id, {
       name: editForm.name,
-      billing_type: editForm.billing_type,
-      fee: parseFloat(editForm.fee),
-      setup_fee: hasSetupFee(editForm.billing_type) && editForm.setup_fee
-        ? parseFloat(editForm.setup_fee)
-        : null,
+      billing_type: getBaseBillingType(editForm.billing_type),
+      fee,
+      setup_fee: setupFee > 0 ? setupFee : null,
       currency: editForm.currency,
       description: editForm.description || null,
     });
@@ -113,11 +124,11 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
             ? {
                 ...p,
                 name: editForm.name,
-                billing_type: editForm.billing_type,
-                fee: parseFloat(editForm.fee),
-                setup_fee: hasSetupFee(editForm.billing_type) && editForm.setup_fee
-                  ? parseFloat(editForm.setup_fee)
-                  : null,
+                billing_type: setupFee > 0
+                  ? getBaseBillingType(editForm.billing_type) === "annual" ? "setup_annual" : "setup_monthly"
+                  : getBaseBillingType(editForm.billing_type),
+                fee,
+                setup_fee: setupFee > 0 ? setupFee : null,
                 currency: editForm.currency,
                 description: editForm.description || null,
               }
@@ -148,7 +159,7 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start sm:items-center justify-between gap-2 flex-wrap">
         <div>
           <h3 className="text-sm font-medium text-foreground">Planes de suscripción</h3>
           {plans.length > 0 && totalMrr > 0 && (
@@ -158,7 +169,7 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
           )}
         </div>
         {!adding && (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Button variant="outline" size="sm" onClick={() => setAdding(true)} className="w-full sm:w-auto">
             <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
             Añadir plan
           </Button>
@@ -201,9 +212,9 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
                     // ── Fila de lectura ──
                     <>
                       <td className="px-4 py-3">
-                        <p className="font-medium">{plan.name}</p>
+                        <p className="font-medium truncate max-w-[220px]">{plan.name}</p>
                         {plan.description && (
-                          <p className="text-xs text-muted-foreground">{plan.description}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[220px]">{plan.description}</p>
                         )}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
@@ -238,7 +249,7 @@ export function SaasPlansManager({ projectId, plans: initialPlans, currency }: P
                               setEditId(plan.id);
                               setEditForm({
                                 name: plan.name,
-                                billing_type: plan.billing_type,
+                                billing_type: getBaseBillingType(plan.billing_type),
                                 fee: String(plan.fee),
                                 setup_fee: String(plan.setup_fee ?? ""),
                                 currency: plan.currency as Currency,
@@ -297,7 +308,10 @@ interface PlanFormFieldsProps {
 }
 
 function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: PlanFormFieldsProps) {
-  const showSetup = hasSetupFee(form.billing_type);
+  const feeAmount = parseAmount(form.fee);
+  const setupAmount = parseAmount(form.setup_fee);
+  const hasAnyPrice = feeAmount > 0 || setupAmount > 0;
+  const canSubmit = !!form.name && hasAnyPrice;
 
   return (
     <div className="space-y-3">
@@ -322,7 +336,6 @@ function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: 
               onChange({
                 ...form,
                 billing_type: v as SaasBillingType,
-                setup_fee: hasSetupFee(v as SaasBillingType) ? form.setup_fee : "",
               })
             }
           >
@@ -330,7 +343,7 @@ function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(["monthly", "annual", "setup_monthly", "setup_annual"] as SaasBillingType[]).map(
+              {(["monthly", "annual"] as SaasBillingType[]).map(
                 (bt) => (
                   <SelectItem key={bt} value={bt}>
                     <div>
@@ -346,28 +359,26 @@ function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: 
           </Select>
         </div>
 
-        {/* Setup fee — solo si aplica */}
-        {showSetup && (
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">
-              Setup fee <span className="text-muted-foreground/60">(pago único inicial)</span>
-            </label>
-            <Input
-              type="number"
-              value={form.setup_fee}
-              onChange={(e) => onChange({ ...form, setup_fee: e.target.value })}
-              placeholder="0.00"
-              className="h-8"
-              min="0"
-              step="0.01"
-            />
-          </div>
-        )}
+        {/* Setup fee */}
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">
+            Setup fee <span className="text-muted-foreground/60">(opcional, pago único)</span>
+          </label>
+          <Input
+            type="number"
+            value={form.setup_fee}
+            onChange={(e) => onChange({ ...form, setup_fee: e.target.value })}
+            placeholder="0.00"
+            className="h-8"
+            min="0"
+            step="0.01"
+          />
+        </div>
 
         {/* Cuota recurrente */}
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground">
-            {feeLabel(form.billing_type)} *
+            {feeLabel(form.billing_type)} <span className="text-muted-foreground/60">(opcional)</span>
           </label>
           <div className="flex gap-2">
             <Input
@@ -393,10 +404,13 @@ function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: 
               </SelectContent>
             </Select>
           </div>
+          <p className="text-[11px] text-muted-foreground/80">
+            Debes completar cuota, setup fee o ambos.
+          </p>
         </div>
 
         {/* Descripción */}
-        <div className={`space-y-1.5 ${showSetup ? "" : "sm:col-span-2"}`}>
+        <div className="space-y-1.5 sm:col-span-2">
           <label className="text-xs text-muted-foreground">Descripción</label>
           <Input
             value={form.description}
@@ -408,31 +422,39 @@ function PlanFormFields({ form, onChange, onConfirm, onCancel, loading, mode }: 
       </div>
 
       {/* Resumen de precios */}
-      {form.fee && (
+      {hasAnyPrice && (
         <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Resumen: </span>
-          {showSetup && form.setup_fee && parseFloat(form.setup_fee) > 0 && (
-            <>{formatCurrency(parseFloat(form.setup_fee), form.currency)} setup + </>
+          {setupAmount > 0 && (
+            <>
+              {formatCurrency(setupAmount, form.currency)} setup
+              {feeAmount > 0 ? " + " : ""}
+            </>
           )}
-          {formatCurrency(parseFloat(form.fee) || 0, form.currency)}
-          {feeSuffix(form.billing_type)}
-          {(form.billing_type === "annual" || form.billing_type === "setup_annual") && parseFloat(form.fee) > 0 && (
+          {feeAmount > 0 && (
+            <>
+              {formatCurrency(feeAmount, form.currency)}
+              {feeSuffix(form.billing_type)}
+            </>
+          )}
+          {(form.billing_type === "annual" || form.billing_type === "setup_annual") && feeAmount > 0 && (
             <span className="ml-2 text-muted-foreground/70">
-              ≈ {formatCurrency(parseFloat(form.fee) / 12, form.currency)}/mes MRR
+              ≈ {formatCurrency(feeAmount / 12, form.currency)}/mes MRR
             </span>
           )}
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <Button
           size="sm"
           onClick={onConfirm}
-          disabled={loading || !form.name || !form.fee}
+          disabled={loading || !canSubmit}
+          className="w-full sm:w-auto"
         >
           {loading ? "Guardando..." : mode === "add" ? "Crear plan" : "Guardar cambios"}
         </Button>
-        <Button size="sm" variant="outline" onClick={onCancel}>
+        <Button size="sm" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
           Cancelar
         </Button>
       </div>

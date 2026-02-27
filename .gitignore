@@ -8,8 +8,10 @@
 /coverage
 
 # next.js
-/.next/
+/.next
 /out/
+!tailwind.config.js
+!postcss.config.js
 
 # production
 /build

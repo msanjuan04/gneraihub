@@ -26,6 +26,10 @@ export async function createMensualidad(
 
     if (data.project_id) revalidatePath(`/proyectos/${data.project_id}`);
     revalidatePath(`/clientes/${data.client_id}`);
+    revalidatePath("/pagos");
+    revalidatePath("/calendario");
+    revalidatePath("/cashflow");
+    revalidatePath("/");
 
     return { success: true, data: record as Mensualidad };
   } catch {
@@ -39,16 +43,24 @@ export async function updateMensualidad(
 ): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("mensualidades")
       .update({
         ...data,
         project_id: data.project_id !== undefined ? data.project_id || null : undefined,
         setup_fee: data.setup_fee !== undefined ? data.setup_fee ?? null : undefined,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id, client_id, project_id")
+      .single();
 
     if (error) return { success: false, error: error.message };
+    revalidatePath("/pagos");
+    revalidatePath("/calendario");
+    revalidatePath("/cashflow");
+    revalidatePath("/");
+    if (updated?.client_id) revalidatePath(`/clientes/${updated.client_id}`);
+    if (updated?.project_id) revalidatePath(`/proyectos/${updated.project_id}`);
     return { success: true };
   } catch {
     return { success: false, error: "Error inesperado" };
@@ -58,8 +70,20 @@ export async function updateMensualidad(
 export async function deleteMensualidad(id: string): Promise<ActionResult> {
   try {
     const supabase = await createClient();
+    const { data: existing } = await supabase
+      .from("mensualidades")
+      .select("id, client_id, project_id")
+      .eq("id", id)
+      .single();
+
     const { error } = await supabase.from("mensualidades").delete().eq("id", id);
     if (error) return { success: false, error: error.message };
+    revalidatePath("/pagos");
+    revalidatePath("/calendario");
+    revalidatePath("/cashflow");
+    revalidatePath("/");
+    if (existing?.client_id) revalidatePath(`/clientes/${existing.client_id}`);
+    if (existing?.project_id) revalidatePath(`/proyectos/${existing.project_id}`);
     return { success: true };
   } catch {
     return { success: false, error: "Error inesperado" };

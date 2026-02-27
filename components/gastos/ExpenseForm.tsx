@@ -131,7 +131,7 @@ export function ExpenseForm({ expense, vendors, projects }: ExpenseFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 w-full">
       {/* Información básica */}
       <Card>
         <CardHeader>
@@ -393,8 +393,8 @@ export function ExpenseForm({ expense, vendors, projects }: ExpenseFormProps) {
       </Card>
 
       {/* Botones de acción */}
-      <div className="flex gap-3">
-        <Button type="submit" variant="gnerai" disabled={loading}>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Button type="submit" variant="gnerai" disabled={loading} className="w-full sm:w-auto">
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -412,6 +412,7 @@ export function ExpenseForm({ expense, vendors, projects }: ExpenseFormProps) {
           variant="outline"
           onClick={() => router.back()}
           disabled={loading}
+          className="w-full sm:w-auto"
         >
           Cancelar
         </Button>

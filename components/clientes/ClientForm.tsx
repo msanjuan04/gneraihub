@@ -84,7 +84,7 @@ export function ClientForm({ client }: { client?: Client }) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 w-full">
       <Card>
         <CardHeader><CardTitle className="text-base">Datos del cliente</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -140,11 +140,11 @@ export function ClientForm({ client }: { client?: Client }) {
         </CardContent>
       </Card>
 
-      <div className="flex gap-3">
-        <Button type="submit" variant="gnerai" disabled={loading}>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Button type="submit" variant="gnerai" disabled={loading} className="w-full sm:w-auto">
           {loading ? <><Loader2 className="h-4 w-4 animate-spin" />Guardando...</> : <><Save className="h-4 w-4" />{isEditing ? "Guardar cambios" : "Crear cliente"}</>}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading}>Cancelar</Button>
+        <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading} className="w-full sm:w-auto">Cancelar</Button>
       </div>
     </form>
   );

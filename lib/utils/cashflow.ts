@@ -5,8 +5,11 @@ import type {
   Invoice,
   IncomeTransaction,
   CashflowMonth,
+  Mensualidad,
+  MensualidadPayment,
 } from "@/types";
 import { getPaymentsInRange } from "./dates";
+import { getMensualidadDueInRange } from "./mensualidades";
 
 /**
  * Calcula el cashflow mensual combinando datos previstos y reales.
@@ -22,21 +25,45 @@ export function calculateCashflow(
     expenseTransactions: ExpenseTransaction[];
     invoices: Invoice[];
     incomeTransactions: IncomeTransaction[];
+    mensualidades?: Mensualidad[];
+    mensualidadPayments?: MensualidadPayment[];
   }
 ): CashflowMonth[] {
+  const mensualidadPaymentsByMensualidad = (data.mensualidadPayments ?? []).reduce<
+    Record<string, MensualidadPayment[]>
+  >((acc, payment) => {
+    acc[payment.mensualidad_id] = acc[payment.mensualidad_id] ?? [];
+    acc[payment.mensualidad_id].push(payment);
+    return acc;
+  }, {});
+
   return months.map((yearMonth) => {
     const [year, month] = yearMonth.split("-").map(Number);
     const rangeStart = startOfMonth(new Date(year, month - 1, 1));
     const rangeEnd = endOfMonth(rangeStart);
 
     // --- Entradas previstas: facturas pending/sent con due_date en el rango ---
-    const incomeExpected = data.invoices
+    const invoiceIncomeExpected = data.invoices
       .filter((inv) => {
         if (!["pending", "sent"].includes(inv.status)) return false;
         const due = parseISO(inv.due_date);
         return isValid(due) && due >= rangeStart && due <= rangeEnd;
       })
       .reduce((sum, inv) => sum + (inv.total ?? 0), 0);
+
+    const mensualidadIncomeExpected = (data.mensualidades ?? [])
+      .filter((mensualidad) => mensualidad.status === "active")
+      .reduce((sum, mensualidad) => {
+        const dueList = getMensualidadDueInRange(
+          mensualidad,
+          mensualidadPaymentsByMensualidad[mensualidad.id] ?? [],
+          rangeStart,
+          rangeEnd
+        );
+        return sum + dueList.reduce((dueSum, due) => dueSum + due.expectedAmount, 0);
+      }, 0);
+
+    const incomeExpected = invoiceIncomeExpected + mensualidadIncomeExpected;
 
     // --- Salidas previstas: gastos activos con pagos en el rango ---
     const expenseExpected = data.expenses
@@ -47,12 +74,21 @@ export function calculateCashflow(
       }, 0);
 
     // --- Entradas reales: income_transactions en el rango ---
-    const incomeReal = data.incomeTransactions
+    const invoiceIncomeReal = data.incomeTransactions
       .filter((t) => {
         const d = parseISO(t.date);
         return isValid(d) && d >= rangeStart && d <= rangeEnd;
       })
       .reduce((sum, t) => sum + t.amount, 0);
+
+    const mensualidadIncomeReal = (data.mensualidadPayments ?? [])
+      .filter((payment) => {
+        const d = parseISO(payment.payment_date);
+        return isValid(d) && d >= rangeStart && d <= rangeEnd;
+      })
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    const incomeReal = invoiceIncomeReal + mensualidadIncomeReal;
 
     // --- Salidas reales: expense_transactions pagadas en el rango ---
     const expenseReal = data.expenseTransactions

@@ -19,6 +19,7 @@ const pageTitles: Record<string, { title: string; description: string }> = {
   "/proyectos": { title: "Proyectos", description: "Proyectos activos y su rentabilidad" },
   "/clientes": { title: "Clientes", description: "Base de clientes y su historial" },
   "/facturas": { title: "Facturas", description: "Facturación y cobros pendientes" },
+  "/pagos": { title: "Pagos", description: "Cobros realizados y próximos vencimientos" },
   "/calendario": { title: "Calendario", description: "Vista unificada de cobros y pagos" },
   "/cashflow": { title: "Cashflow", description: "Flujo de caja previsto vs real" },
   "/ajustes": { title: "Ajustes", description: "Configuración general de la aplicación" },

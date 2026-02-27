@@ -8,8 +8,8 @@ export default async function NuevaFacturaPage() {
   const supabase = await createClient();
 
   const [clientsRes, projectsRes] = await Promise.all([
-    supabase.from("clients").select("*").eq("status", "active").order("name"),
-    supabase.from("projects").select("*").eq("status", "active").order("name"),
+    supabase.from("clients").select("*").order("name"),
+    supabase.from("projects").select("*").order("name"),
   ]);
 
   return (

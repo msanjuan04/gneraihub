@@ -8,6 +8,7 @@ import {
   FolderKanban,
   Users,
   FileText,
+  Wallet,
   Calendar,
   TrendingUp,
   Settings,
@@ -46,6 +47,11 @@ const navItems = [
     href: "/facturas",
     label: "Facturas",
     icon: FileText,
+  },
+  {
+    href: "/pagos",
+    label: "Pagos",
+    icon: Wallet,
   },
   {
     href: "/calendario",

@@ -24,8 +24,8 @@ export default async function FacturaDetailPage({ params }: Props) {
 
   const [invoiceRes, clientsRes, projectsRes] = await Promise.all([
     supabase.from("invoices").select("*, client:clients(*), project:projects(*)").eq("id", params.id).single(),
-    supabase.from("clients").select("*").eq("status", "active").order("name"),
-    supabase.from("projects").select("*").eq("status", "active").order("name"),
+    supabase.from("clients").select("*").order("name"),
+    supabase.from("projects").select("*").order("name"),
   ]);
 
   if (invoiceRes.error || !invoiceRes.data) notFound();

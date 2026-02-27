@@ -95,6 +95,31 @@ export interface Mensualidad {
 export type MensualidadInsert = Omit<Mensualidad, "id" | "created_at" | "client" | "project">;
 export type MensualidadUpdate = Partial<MensualidadInsert>;
 
+// ---- Mensualidad Payments (cobros reales de mensualidades) ----
+export interface MensualidadPayment {
+  id: string;
+  mensualidad_id: string;
+  client_id: string | null;
+  project_id: string | null;
+  payment_date: string;
+  amount: number;
+  currency: Currency;
+  payment_method: PaymentMethod | null;
+  is_setup: boolean;
+  notes: string | null;
+  created_at: string;
+  // Relaciones
+  mensualidad?: Mensualidad;
+  client?: Client | null;
+  project?: Project | null;
+}
+
+export type MensualidadPaymentInsert = Omit<
+  MensualidadPayment,
+  "id" | "created_at" | "mensualidad" | "client" | "project"
+>;
+export type MensualidadPaymentUpdate = Partial<MensualidadPaymentInsert>;
+
 // ---- SaaS Plans ----
 
 export interface SaasPlan {
@@ -120,6 +145,7 @@ export interface SaasSubscription {
   project_id: string;
   client_id: string;
   plan_id: string | null;
+  is_free: boolean;
   status: SaasSubscriptionStatus;
   start_date: string | null;
   end_date: string | null;
@@ -213,7 +239,8 @@ export interface Invoice {
   concept: string;
   amount: number;
   tax_rate: number;
-  total: number; // generado: amount + amount * tax_rate / 100
+  irpf_rate: number;
+  total: number; // generado: amount + IVA - IRPF
   currency: Currency;
   issue_date: string;
   due_date: string;
@@ -284,7 +311,13 @@ export interface CalendarEvent {
   date: string;
   status: string;
   sourceId: string; // ID del registro original
-  sourceType: "company_expense" | "invoice" | "expense_transaction" | "income_transaction";
+  sourceType:
+    | "company_expense"
+    | "invoice"
+    | "expense_transaction"
+    | "income_transaction"
+    | "mensualidad"
+    | "mensualidad_payment";
 }
 
 // Datos de cashflow mensual

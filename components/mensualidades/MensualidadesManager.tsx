@@ -107,7 +107,7 @@ export function MensualidadesManager({
   // ── Acciones ─────────────────────────────────────────────
 
   const handleAdd = async () => {
-    if (!form.name || !form.fee || (!form.client_id && !clientId)) return;
+    if (!form.name || !form.fee || !form.start_date || (!form.client_id && !clientId)) return;
     setLoading(true);
 
     const payload: MensualidadInsert = {
@@ -449,7 +449,7 @@ function MensualidadForm({
 }: FormProps) {
   const showSetup = hasSetupFee(form.billing_type);
 
-  const canSave = form.name && form.fee && !requireClient;
+  const canSave = form.name && form.fee && form.start_date && !requireClient;
 
   return (
     <div className="space-y-3">
@@ -568,9 +568,9 @@ function MensualidadForm({
           </div>
         )}
 
-        {/* Fecha de inicio */}
+        {/* Fecha de primer pago */}
         <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Fecha inicio</label>
+          <label className="text-xs text-muted-foreground">Fecha primer pago *</label>
           <input
             type="date"
             value={form.start_date}

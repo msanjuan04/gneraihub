@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export default async function CashflowPage() {
   const supabase = await createClient();
 
-  const [expensesRes, expenseTransactionsRes, invoicesRes, incomeTransactionsRes] = await Promise.all([
+  const [expensesRes, expenseTransactionsRes, invoicesRes, incomeTransactionsRes, mensualidadesRes, mensualidadPaymentsRes] = await Promise.all([
     supabase
       .from("company_expenses")
       .select("id,amount,status,interval,billing_day,billing_date,start_date,end_date")
@@ -23,12 +23,20 @@ export default async function CashflowPage() {
     supabase
       .from("income_transactions")
       .select("date,amount"),
+    supabase
+      .from("mensualidades")
+      .select("id,status,billing_type,fee,setup_fee,start_date,end_date,created_at"),
+    supabase
+      .from("mensualidad_payments")
+      .select("mensualidad_id,payment_date,amount,is_setup"),
   ]);
 
   const expenses = expensesRes.data ?? [];
   const expenseTransactions = expenseTransactionsRes.data ?? [];
   const invoices = (invoicesRes.data ?? []) as any[];
   const incomeTransactions = incomeTransactionsRes.data ?? [];
+  const mensualidades = (mensualidadesRes.data ?? []) as any[];
+  const mensualidadPayments = (mensualidadPaymentsRes.data ?? []) as any[];
 
   // 3 meses atrás + 3 hacia adelante
   const months = getMonthRange(3, 3);
@@ -37,6 +45,8 @@ export default async function CashflowPage() {
     expenseTransactions: expenseTransactions as any,
     invoices,
     incomeTransactions: incomeTransactions as any,
+    mensualidades,
+    mensualidadPayments,
   });
 
   // Desglose por categoría del mes actual
