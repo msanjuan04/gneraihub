@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Moon, Sun } from "lucide-react";
+import { Bell, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -11,35 +11,26 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-// Mapa de rutas a títulos de página
-const pageTitles: Record<string, { title: string; description: string }> = {
-  "/": { title: "Dashboard", description: "Resumen financiero y operativo" },
-  "/gastos": { title: "Gastos", description: "Gestión de gastos recurrentes y variables" },
-  "/proyectos": { title: "Proyectos", description: "Proyectos activos y su rentabilidad" },
-  "/clientes": { title: "Clientes", description: "Base de clientes y su historial" },
-  "/facturas": { title: "Facturas", description: "Facturación y cobros pendientes" },
-  "/pagos": { title: "Pagos", description: "Cobros realizados y próximos vencimientos" },
-  "/calendario": { title: "Calendario", description: "Vista unificada de cobros y pagos" },
-  "/cashflow": { title: "Cashflow", description: "Flujo de caja previsto vs real" },
-  "/ajustes": { title: "Ajustes", description: "Configuración general de la aplicación" },
-};
-
+import { DASHBOARD_PAGE_INFO } from "@/components/layout/navigation";
 function getPageInfo(pathname: string) {
   // Primero buscar coincidencia exacta
-  if (pageTitles[pathname]) return pageTitles[pathname];
+  if (DASHBOARD_PAGE_INFO[pathname]) return DASHBOARD_PAGE_INFO[pathname];
 
   // Luego buscar por prefijo
-  const match = Object.entries(pageTitles).find(
+  const match = Object.entries(DASHBOARD_PAGE_INFO).find(
     ([route]) => route !== "/" && pathname.startsWith(route)
   );
 
   return match ? match[1] : { title: "GneraiHub", description: "" };
 }
 
-export function Header() {
+interface HeaderProps {
+  onOpenMobileMenu?: () => void;
+}
+
+export function Header({ onOpenMobileMenu }: HeaderProps) {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
   const pageInfo = getPageInfo(pathname);
   
   const handleNotificationsClick = () => {
@@ -47,17 +38,31 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/95 backdrop-blur-sm px-6">
-      {/* Título de la página */}
-      <div className="flex-1 min-w-0">
-        <h1 className="text-base font-semibold text-foreground truncate">
-          {pageInfo.title}
-        </h1>
-        {pageInfo.description && (
-          <p className="text-xs text-muted-foreground truncate hidden sm:block">
-            {pageInfo.description}
-          </p>
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/95 backdrop-blur-sm px-4 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {onOpenMobileMenu && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 lg:hidden"
+            onClick={onOpenMobileMenu}
+          >
+            <Menu className="h-4 w-4" />
+            <span className="sr-only">Abrir menú</span>
+          </Button>
         )}
+
+        {/* Título de la página */}
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold text-foreground truncate">
+            {pageInfo.title}
+          </h1>
+          {pageInfo.description && (
+            <p className="text-xs text-muted-foreground truncate hidden sm:block">
+              {pageInfo.description}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Acciones del header */}

@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils/currency";
 import { PlusCircle, Users, Mail, Phone, ExternalLink } from "lucide-react";
+import { DeleteClientButton } from "@/components/clientes/DeleteClientButton";
+import { ExportMenu } from "@/components/shared/ExportMenu";
 
 export default async function ClientesPage() {
   const supabase = await createClient();
@@ -33,18 +35,39 @@ export default async function ClientesPage() {
     if (i.client_id) { acc[i.client_id] = acc[i.client_id] ?? []; acc[i.client_id].push(i); }
     return acc;
   }, {});
+  const exportRows = (clients ?? []).map((client) => {
+    const clientInvoices = invoicesByClient[client.id] ?? [];
+    const totalBilled = clientInvoices.reduce((sum: number, invoice: any) => sum + (invoice.total ?? 0), 0);
+    return {
+      nombre: client.name,
+      empresa: client.company ?? "",
+      nif: client.nif ?? "",
+      email: client.email ?? "",
+      telefono: client.phone ?? "",
+      total_facturado: totalBilled,
+      estado: client.status,
+    };
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {(clients ?? []).filter((c) => c.status === "active").length} clientes activos
         </p>
-        <Button variant="gnerai" size="sm" asChild>
-          <Link href="/clientes/nuevo">
-            <PlusCircle className="h-4 w-4" />Nuevo cliente
-          </Link>
-        </Button>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <ExportMenu
+            data={exportRows}
+            filename="clientes"
+            sheetName="Clientes"
+            buttonClassName="w-full sm:w-auto"
+          />
+          <Button variant="gnerai" size="sm" className="w-full sm:w-auto" asChild>
+            <Link href="/clientes/nuevo">
+              <PlusCircle className="h-4 w-4" />Nuevo cliente
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {(clients ?? []).length === 0 ? (
@@ -56,8 +79,8 @@ export default async function ClientesPage() {
           </Button>
         </div>
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cliente</th>
@@ -106,9 +129,12 @@ export default async function ClientesPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                        <Link href={`/clientes/${client.id}`}><ExternalLink className="h-4 w-4" /></Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <Link href={`/clientes/${client.id}`}><ExternalLink className="h-4 w-4" /></Link>
+                        </Button>
+                        <DeleteClientButton clientId={client.id} compact />
+                      </div>
                     </td>
                   </tr>
                 );

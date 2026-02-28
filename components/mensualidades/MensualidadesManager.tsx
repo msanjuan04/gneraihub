@@ -246,8 +246,8 @@ export function MensualidadesManager({
 
       {/* Tabla de mensualidades */}
       {items.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 {/* Mostrar cliente si estamos en contexto proyecto */}

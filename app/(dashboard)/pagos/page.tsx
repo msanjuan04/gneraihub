@@ -4,11 +4,14 @@ import {
   addMonths,
   differenceInCalendarDays,
   endOfDay,
+  endOfMonth,
+  format,
   isAfter,
   isBefore,
   isValid,
   parseISO,
   startOfDay,
+  startOfMonth,
 } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +25,7 @@ import { BILLING_TYPE_LABELS } from "@/lib/utils/saas";
 import { CalendarClock, History, Wallet, AlertTriangle, CalendarRange } from "lucide-react";
 import {
   DeletePaymentButton,
+  EditPaymentButton,
   RegisterPaymentButton,
 } from "@/components/pagos/PaymentActionButtons";
 import type { Currency, Mensualidad, MensualidadPayment, PaymentMethod } from "@/types";
@@ -36,6 +40,11 @@ type MensualidadPaymentWithRelations = MensualidadPayment & {
   client?: { id: string; name: string } | null;
   project?: { id: string; name: string } | null;
 };
+
+type MensualidadPaymentSchedule = Pick<
+  MensualidadPayment,
+  "mensualidad_id" | "payment_date" | "is_setup"
+>;
 
 type InvoiceWithRelations = {
   id: string;
@@ -90,6 +99,7 @@ type HistoryRow = {
   currency: Currency;
   badge: string;
   paymentMethod?: PaymentMethod | null;
+  paymentNotes?: string | null;
   paymentId?: string;
   invoiceId?: string | null;
 };
@@ -121,42 +131,102 @@ const paymentMethodLabel: Record<PaymentMethod, string> = {
   cash: "Efectivo",
   otro: "Otro",
 };
+const HISTORY_MONTHS = 12;
+const HISTORY_LIMIT = 250;
 
 export default async function PagosPage() {
   const supabase = await createClient();
-  const today = startOfDay(new Date());
+  const now = new Date();
+  const today = startOfDay(now);
   const next30Days = addDays(today, 30);
   const trackingEnd = endOfDay(addMonths(today, 12));
+  const historyStart = startOfDay(addMonths(today, -HISTORY_MONTHS));
+  const trackingEndISO = format(trackingEnd, "yyyy-MM-dd");
+  const historyStartISO = format(historyStart, "yyyy-MM-dd");
+  const monthStartISO = format(startOfMonth(now), "yyyy-MM-dd");
+  const monthEndISO = format(endOfMonth(now), "yyyy-MM-dd");
 
-  const [mensualidadesRes, paymentsRes, invoicesRes, incomeTransactionsRes] = await Promise.all([
-    supabase
-      .from("mensualidades")
-      .select("*, client:clients(id,name,company), project:projects(id,name)")
-      .order("created_at", { ascending: false }),
+  const { data: mensualidadesData } = await supabase
+    .from("mensualidades")
+    .select(
+      "id,client_id,project_id,name,billing_type,fee,setup_fee,currency,status,start_date,end_date,created_at,client:clients(id,name,company),project:projects(id,name)"
+    )
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  const mensualidades = (mensualidadesData ?? []) as MensualidadWithRelations[];
+  const mensualidadIds = mensualidades.map((m) => m.id);
+
+  let paymentsForSchedule: MensualidadPaymentSchedule[] = [];
+  if (mensualidadIds.length > 0) {
+    const { data: paymentsScheduleData } = await supabase
+      .from("mensualidad_payments")
+      .select("mensualidad_id,payment_date,is_setup")
+      .in("mensualidad_id", mensualidadIds);
+    paymentsForSchedule = (paymentsScheduleData ?? []) as MensualidadPaymentSchedule[];
+  }
+
+  const [
+    paymentsHistoryRes,
+    mensualidadMonthTotalsRes,
+    overdueInvoicesRes,
+    upcomingInvoicesRes,
+    incomeTransactionsRes,
+    incomeMonthTotalsRes,
+  ] = await Promise.all([
     supabase
       .from("mensualidad_payments")
       .select(
-        "*, mensualidad:mensualidades(id,name), client:clients(id,name), project:projects(id,name)"
+        "id,mensualidad_id,client_id,project_id,payment_date,amount,currency,payment_method,is_setup,notes,mensualidad:mensualidades(id,name),client:clients(id,name),project:projects(id,name)"
       )
-      .order("payment_date", { ascending: false }),
+      .gte("payment_date", historyStartISO)
+      .order("payment_date", { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from("mensualidad_payments")
+      .select("amount")
+      .gte("payment_date", monthStartISO)
+      .lte("payment_date", monthEndISO),
     supabase
       .from("invoices")
-      .select("id,invoice_number,total,currency,due_date,status,client:clients(id,name),project:projects(id,name)")
+      .select(
+        "id,invoice_number,total,currency,due_date,status,client:clients(id,name),project:projects(id,name)"
+      )
+      .eq("status", "overdue")
+      .order("due_date", { ascending: true }),
+    supabase
+      .from("invoices")
+      .select(
+        "id,invoice_number,total,currency,due_date,status,client:clients(id,name),project:projects(id,name)"
+      )
+      .in("status", ["pending", "sent"])
+      .lte("due_date", trackingEndISO)
       .order("due_date", { ascending: true }),
     supabase
       .from("income_transactions")
       .select(
         "id,invoice_id,concept,amount,currency,date,payment_method,client:clients(id,name),project:projects(id,name),invoice:invoices(invoice_number)"
       )
-      .order("date", { ascending: false }),
+      .gte("date", historyStartISO)
+      .order("date", { ascending: false })
+      .limit(HISTORY_LIMIT),
+    supabase
+      .from("income_transactions")
+      .select("amount")
+      .gte("date", monthStartISO)
+      .lte("date", monthEndISO),
   ]);
 
-  const mensualidades = (mensualidadesRes.data ?? []) as MensualidadWithRelations[];
-  const payments = (paymentsRes.data ?? []) as MensualidadPaymentWithRelations[];
-  const invoices = (invoicesRes.data ?? []) as unknown as InvoiceWithRelations[];
+  const payments = (paymentsHistoryRes.data ?? []) as MensualidadPaymentWithRelations[];
+  const invoices = [
+    ...(overdueInvoicesRes.data ?? []),
+    ...(upcomingInvoicesRes.data ?? []),
+  ] as unknown as InvoiceWithRelations[];
   const incomeTransactions = (incomeTransactionsRes.data ?? []) as unknown as IncomeTransactionWithRelations[];
+  const mensualidadMonthTotals = mensualidadMonthTotalsRes.data ?? [];
+  const incomeMonthTotals = incomeMonthTotalsRes.data ?? [];
 
-  const paymentsByMensualidad = payments.reduce<Record<string, MensualidadPaymentWithRelations[]>>(
+  const paymentsByMensualidad = paymentsForSchedule.reduce<Record<string, MensualidadPaymentSchedule[]>>(
     (acc, p) => {
       acc[p.mensualidad_id] = acc[p.mensualidad_id] ?? [];
       acc[p.mensualidad_id].push(p);
@@ -226,15 +296,14 @@ export default async function PagosPage() {
     return !isBefore(item.dueDate, today) && !isAfter(item.dueDate, next30Days);
   });
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const mensualidadCollectedThisMonth = payments
-    .filter((p) => {
-      return p.payment_date.slice(0, 7) === currentMonth;
-    })
-    .reduce((sum, p) => sum + p.amount, 0);
-  const invoicesCollectedThisMonth = incomeTransactions
-    .filter((t) => t.date.slice(0, 7) === currentMonth)
-    .reduce((sum, t) => sum + t.amount, 0);
+  const mensualidadCollectedThisMonth = mensualidadMonthTotals.reduce(
+    (sum, payment) => sum + (payment.amount ?? 0),
+    0
+  );
+  const invoicesCollectedThisMonth = incomeMonthTotals.reduce(
+    (sum, income) => sum + (income.amount ?? 0),
+    0
+  );
   const collectedThisMonth = mensualidadCollectedThisMonth + invoicesCollectedThisMonth;
 
   const upcoming30Amount = upcoming30Items.reduce(
@@ -258,6 +327,7 @@ export default async function PagosPage() {
       currency: payment.currency as Currency,
       badge: payment.is_setup ? "Setup" : "Mensualidad",
       paymentMethod: payment.payment_method,
+      paymentNotes: payment.notes,
       paymentId: payment.id,
     })),
     ...incomeTransactions.map((tx) => {
@@ -355,23 +425,23 @@ export default async function PagosPage() {
       </div>
 
       <Tabs defaultValue="upcoming">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="upcoming" className="gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="upcoming" className="gap-2 shrink-0">
               <CalendarClock className="h-3.5 w-3.5" />
               Próximos cobros
               <Badge variant="secondary" className="ml-1">
                 {upcomingRows.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="history" className="gap-2">
+            <TabsTrigger value="history" className="gap-2 shrink-0">
               <History className="h-3.5 w-3.5" />
-              Histórico
+              Histórico (12m)
               <Badge variant="secondary" className="ml-1">
                 {historyRows.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="tracking" className="gap-2">
+            <TabsTrigger value="tracking" className="gap-2 shrink-0">
               <CalendarRange className="h-3.5 w-3.5" />
               Seguimiento (12m)
               <Badge variant="secondary" className="ml-1">
@@ -388,8 +458,8 @@ export default async function PagosPage() {
               <p className="text-sm text-muted-foreground">No hay cobros pendientes.</p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cliente</th>
@@ -475,8 +545,8 @@ export default async function PagosPage() {
               <p className="text-sm text-muted-foreground">No hay cobros registrados todavía.</p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha</th>
@@ -517,7 +587,16 @@ export default async function PagosPage() {
                       </td>
                       <td className="px-4 py-3">
                         {row.source === "mensualidad" && row.paymentId ? (
-                          <DeletePaymentButton paymentId={row.paymentId} />
+                          <div className="flex items-center justify-end gap-1">
+                            <EditPaymentButton
+                              paymentId={row.paymentId}
+                              paymentDate={row.date}
+                              amount={row.amount}
+                              paymentMethod={row.paymentMethod}
+                              notes={row.paymentNotes}
+                            />
+                            <DeletePaymentButton paymentId={row.paymentId} />
+                          </div>
                         ) : row.invoiceId ? (
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" asChild>
                             <Link href={`/facturas/${row.invoiceId}`}>Ver</Link>
@@ -541,8 +620,8 @@ export default async function PagosPage() {
               <p className="text-sm text-muted-foreground">No hay vencimientos planificados en los próximos 12 meses.</p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mes</th>

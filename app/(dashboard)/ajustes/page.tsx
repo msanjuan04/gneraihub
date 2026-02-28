@@ -1,24 +1,24 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/server";
+import { UserSettingsForm } from "@/components/settings/UserSettingsForm";
+import type { UserSettings } from "@/types";
 
-export default function AjustesPage() {
+export default async function AjustesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const settingsRes = user?.id
+    ? await supabase.from("user_settings").select("*").eq("user_id", user.id).maybeSingle()
+    : { data: null };
+
   return (
-    <div className="space-y-6 max-w-3xl">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base">Ajustes</CardTitle>
-            <Badge variant="brand">Nuevo</Badge>
-          </div>
-          <CardDescription>
-            Centro de configuración preparado para preferencias del equipo y de la cuenta.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Esta sección ya está conectada en la navegación.</p>
-          <p>En el siguiente paso se pueden añadir preferencias de perfil, notificaciones y facturación.</p>
-        </CardContent>
-      </Card>
+    <div className="space-y-6 max-w-4xl">
+      <UserSettingsForm
+        settings={(settingsRes.data as UserSettings | null) ?? null}
+        userEmail={user?.email ?? ""}
+        userFullName={(user?.user_metadata?.full_name as string | undefined) ?? ""}
+      />
     </div>
   );
 }

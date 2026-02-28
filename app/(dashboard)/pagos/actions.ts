@@ -108,3 +108,38 @@ export async function deleteMensualidadPayment(id: string): Promise<ActionResult
     return { success: false, error: "Error inesperado al eliminar el cobro" };
   }
 }
+
+export async function updateMensualidadPayment(
+  id: string,
+  data: Partial<MensualidadPaymentInsert>
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { data: existing, error: existingError } = await supabase
+      .from("mensualidad_payments")
+      .select("id,client_id,project_id")
+      .eq("id", id)
+      .single();
+
+    if (existingError || !existing) {
+      return { success: false, error: "No se encontró el cobro" };
+    }
+
+    const payload = {
+      payment_date: data.payment_date,
+      amount: data.amount,
+      payment_method:
+        data.payment_method === undefined ? undefined : data.payment_method || null,
+      notes: data.notes === undefined ? undefined : data.notes || null,
+    };
+
+    const { error } = await supabase.from("mensualidad_payments").update(payload).eq("id", id);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePaymentPaths(existing.client_id, existing.project_id);
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error inesperado al actualizar el cobro" };
+  }
+}

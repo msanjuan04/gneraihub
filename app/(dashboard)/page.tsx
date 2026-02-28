@@ -1,12 +1,22 @@
 import { createClient } from "@/lib/supabase/server";
 import { StatsCards } from "@/components/dashboard/StatsCards";
-import { CashflowChart } from "@/components/dashboard/CashflowChart";
+import { LazyCashflowChart } from "@/components/dashboard/LazyCashflowChart";
 import { UpcomingPayments } from "@/components/dashboard/UpcomingPayments";
 import { OverdueAlerts } from "@/components/dashboard/OverdueAlerts";
 import { calculateCashflow } from "@/lib/utils/cashflow";
 import { getPaymentsInRange, getMonthRange, getCurrentMonthRange } from "@/lib/utils/dates";
 import { getMensualidadDueInRange } from "@/lib/utils/mensualidades";
-import { addDays, addMonths, endOfDay, format, parseISO, isValid, startOfDay, startOfMonth } from "date-fns";
+import {
+  addDays,
+  addMonths,
+  endOfDay,
+  endOfMonth,
+  format,
+  parseISO,
+  isValid,
+  startOfDay,
+  startOfMonth,
+} from "date-fns";
 import type { CalendarEvent, Invoice, MensualidadPayment } from "@/types";
 
 type DashboardMensualidad = {
@@ -29,13 +39,21 @@ type DashboardMensualidad = {
  */
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const lookbackDate = format(startOfMonth(addMonths(new Date(), -5)), "yyyy-MM-dd");
+  const now = new Date();
+  const today = startOfDay(now);
+  const nextWeek = endOfDay(addDays(today, 7));
+  const lookbackDate = format(startOfMonth(addMonths(now, -5)), "yyyy-MM-dd");
+  const currentMonthEnd = endOfDay(endOfMonth(now));
+  const invoiceWindowEnd =
+    nextWeek.getTime() > currentMonthEnd.getTime() ? nextWeek : currentMonthEnd;
+  const invoiceWindowEndISO = format(invoiceWindowEnd, "yyyy-MM-dd");
 
   // Cargar todos los datos necesarios en paralelo
   const [
     expensesRes,
     expenseTransactionsRes,
-    invoicesRes,
+    overdueInvoicesRes,
+    plannedInvoicesRes,
     incomeTransactionsRes,
     mensualidadesRes,
     mensualidadPaymentsRes,
@@ -52,7 +70,14 @@ export default async function DashboardPage() {
     supabase
       .from("invoices")
       .select("id,invoice_number,total,currency,due_date,status,client:clients(name)")
-      .or(`status.eq.overdue,due_date.gte.${lookbackDate}`)
+      .eq("status", "overdue")
+      .order("due_date", { ascending: true }),
+    supabase
+      .from("invoices")
+      .select("id,invoice_number,total,currency,due_date,status,client:clients(name)")
+      .in("status", ["pending", "sent"])
+      .gte("due_date", lookbackDate)
+      .lte("due_date", invoiceWindowEndISO)
       .order("due_date", { ascending: true }),
     supabase
       .from("income_transactions")
@@ -67,12 +92,16 @@ export default async function DashboardPage() {
       .from("mensualidad_payments")
       .select("id,mensualidad_id,payment_date,amount,currency,is_setup")
       .gte("payment_date", lookbackDate)
+      .lte("payment_date", invoiceWindowEndISO)
       .order("payment_date", { ascending: false }),
   ]);
 
   const expenses = expensesRes.data ?? [];
   const expenseTransactions = expenseTransactionsRes.data ?? [];
-  const invoices = (invoicesRes.data ?? []) as unknown as Invoice[];
+  const invoices = [
+    ...(overdueInvoicesRes.data ?? []),
+    ...(plannedInvoicesRes.data ?? []),
+  ] as unknown as Invoice[];
   const incomeTransactions = incomeTransactionsRes.data ?? [];
   const mensualidades = (mensualidadesRes.data ?? []) as unknown as DashboardMensualidad[];
   const mensualidadPayments = (mensualidadPaymentsRes.data ?? []) as MensualidadPayment[];
@@ -152,8 +181,6 @@ export default async function DashboardPage() {
   });
 
   // --- Próximos 7 días (pagos y cobros) ---
-  const today = startOfDay(new Date());
-  const nextWeek = endOfDay(addDays(today, 7));
   const upcomingEvents: CalendarEvent[] = [];
 
   // Pagos previstos próximos 7 días
@@ -242,7 +269,7 @@ export default async function DashboardPage() {
       {/* Fila: gráfico + próximos pagos */}
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <CashflowChart data={cashflowData} />
+          <LazyCashflowChart data={cashflowData} />
         </div>
         <div className="lg:col-span-2">
           <UpcomingPayments events={upcomingEvents} />

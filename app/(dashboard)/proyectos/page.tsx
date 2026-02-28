@@ -8,6 +8,7 @@ import { formatDate } from "@/lib/utils/dates";
 import { planMrr } from "@/lib/utils/saas";
 import { PlusCircle, FolderKanban, ExternalLink, Zap } from "lucide-react";
 import type { SaasPlan } from "@/types";
+import { DeleteProjectButton } from "@/components/proyectos/DeleteProjectButton";
 
 const statusConfig = {
   active: { label: "Activo", variant: "success" as const },
@@ -67,13 +68,13 @@ export default async function ProyectosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
             {activeProjects.length} proyecto{activeProjects.length !== 1 ? "s" : ""} activo{activeProjects.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button variant="gnerai" size="sm" asChild>
+        <Button variant="gnerai" size="sm" className="w-full sm:w-auto" asChild>
           <Link href="/proyectos/nuevo">
             <PlusCircle className="h-4 w-4" />
             Nuevo proyecto
@@ -177,12 +178,15 @@ export default async function ProyectosPage() {
                   )}
 
                   {/* Acción */}
-                  <Link
-                    href={`/proyectos/${project.id}`}
-                    className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
-                  >
-                    Ver detalle <ExternalLink className="h-3 w-3" />
-                  </Link>
+                  <div className="flex items-center justify-between pt-1">
+                    <Link
+                      href={`/proyectos/${project.id}`}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      Ver detalle <ExternalLink className="h-3 w-3" />
+                    </Link>
+                    <DeleteProjectButton projectId={project.id} compact />
+                  </div>
                 </CardContent>
               </Card>
             );

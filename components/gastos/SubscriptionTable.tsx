@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateExpenseStatus, duplicateExpense } from "@/app/(dashboard)/gastos/actions";
+import { DeleteExpenseButton } from "@/components/gastos/DeleteExpenseButton";
 
 interface SubscriptionTableProps {
   expenses: CompanyExpense[];
@@ -86,8 +87,8 @@ export function SubscriptionTable({ expenses }: SubscriptionTableProps) {
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="rounded-lg border border-border overflow-x-auto">
+      <table className="w-full min-w-[680px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/40">
             <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nombre</th>
@@ -179,57 +180,60 @@ export function SubscriptionTable({ expenses }: SubscriptionTableProps) {
 
                 {/* Acciones */}
                 <td className="px-4 py-3">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled={isLoading}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Acciones</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/gastos/${expense.id}`}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDuplicate(expense.id)}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        Duplicar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {expense.status === "active" && (
-                        <DropdownMenuItem
-                          onClick={() => handleStatusChange(expense.id, "paused")}
+                  <div className="flex items-center justify-end gap-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={isLoading}
                         >
-                          <Pause className="mr-2 h-4 w-4" />
-                          Pausar
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Acciones</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/gastos/${expense.id}`}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar
+                          </Link>
                         </DropdownMenuItem>
-                      )}
-                      {expense.status === "paused" && (
-                        <DropdownMenuItem
-                          onClick={() => handleStatusChange(expense.id, "active")}
-                        >
-                          <Play className="mr-2 h-4 w-4" />
-                          Reactivar
+                        <DropdownMenuItem onClick={() => handleDuplicate(expense.id)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicar
                         </DropdownMenuItem>
-                      )}
-                      {expense.status !== "cancelled" && (
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => handleStatusChange(expense.id, "cancelled")}
-                        >
-                          <X className="mr-2 h-4 w-4" />
-                          Cancelar
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <DropdownMenuSeparator />
+                        {expense.status === "active" && (
+                          <DropdownMenuItem
+                            onClick={() => handleStatusChange(expense.id, "paused")}
+                          >
+                            <Pause className="mr-2 h-4 w-4" />
+                            Pausar
+                          </DropdownMenuItem>
+                        )}
+                        {expense.status === "paused" && (
+                          <DropdownMenuItem
+                            onClick={() => handleStatusChange(expense.id, "active")}
+                          >
+                            <Play className="mr-2 h-4 w-4" />
+                            Reactivar
+                          </DropdownMenuItem>
+                        )}
+                        {expense.status !== "cancelled" && (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleStatusChange(expense.id, "cancelled")}
+                          >
+                            <X className="mr-2 h-4 w-4" />
+                            Cancelar
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DeleteExpenseButton expenseId={expense.id} compact />
+                  </div>
                 </td>
               </tr>
             );

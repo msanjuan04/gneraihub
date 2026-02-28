@@ -12,6 +12,7 @@ import { ArrowLeft, Pencil, FileText, Receipt, Zap, RefreshCw } from "lucide-rea
 import { MensualidadesManager } from "@/components/mensualidades/MensualidadesManager";
 import { SaasPlansManager } from "@/components/proyectos/SaasPlansManager";
 import { SaasSubscriptionsManager } from "@/components/proyectos/SaasSubscriptionsManager";
+import { DeleteProjectButton } from "@/components/proyectos/DeleteProjectButton";
 import type {
   Mensualidad,
   Client,
@@ -22,27 +23,65 @@ import type {
 
 interface Props {
   params: { id: string };
+  searchParams?: { invoicePage?: string; expensePage?: string };
 }
 
-export default async function ProyectoDetailPage({ params }: Props) {
-  const supabase = await createClient();
+const DETAIL_TABLE_PAGE_SIZE = 20;
 
-  const [projectRes, invoicesRes, expensesRes, incomeRes, mensualidadesRes, clientsRes, saasPlansRes, saasSubsRes] =
+export default async function ProyectoDetailPage({ params, searchParams }: Props) {
+  const supabase = await createClient();
+  const parsedInvoicePage = Number.parseInt(searchParams?.invoicePage ?? "1", 10);
+  const parsedExpensePage = Number.parseInt(searchParams?.expensePage ?? "1", 10);
+  const invoicePage = Number.isFinite(parsedInvoicePage) && parsedInvoicePage > 0 ? parsedInvoicePage : 1;
+  const expensePage = Number.isFinite(parsedExpensePage) && parsedExpensePage > 0 ? parsedExpensePage : 1;
+  const invoiceFrom = (invoicePage - 1) * DETAIL_TABLE_PAGE_SIZE;
+  const invoiceTo = invoiceFrom + DETAIL_TABLE_PAGE_SIZE - 1;
+  const expenseFrom = (expensePage - 1) * DETAIL_TABLE_PAGE_SIZE;
+  const expenseTo = expenseFrom + DETAIL_TABLE_PAGE_SIZE - 1;
+
+  const [projectRes, invoicesRes, expensesRes, incomeRes, expenseTotalsRes, mensualidadesRes, clientsRes, saasPlansRes, saasSubsRes] =
     await Promise.all([
-      supabase.from("projects").select("*, client:clients(*)").eq("id", params.id).single(),
-      supabase.from("invoices").select("*, client:clients(*)").eq("project_id", params.id).order("issue_date", { ascending: false }),
-      supabase.from("expense_transactions").select("*").eq("project_id", params.id).order("date", { ascending: false }),
-      supabase.from("income_transactions").select("*").eq("project_id", params.id),
+      supabase
+        .from("projects")
+        .select("id,name,status,is_saas,budget,currency,client:clients(id,name)")
+        .eq("id", params.id)
+        .single(),
+      supabase
+        .from("invoices")
+        .select("id,invoice_number,concept,total,currency,due_date,status", { count: "exact" })
+        .eq("project_id", params.id)
+        .order("issue_date", { ascending: false })
+        .range(invoiceFrom, invoiceTo),
+      supabase
+        .from("expense_transactions")
+        .select("id,name,category,amount,currency,date", { count: "exact" })
+        .eq("project_id", params.id)
+        .order("date", { ascending: false })
+        .range(expenseFrom, expenseTo),
+      supabase
+        .from("income_transactions")
+        .select("amount")
+        .eq("project_id", params.id),
+      supabase
+        .from("expense_transactions")
+        .select("amount")
+        .eq("project_id", params.id),
       supabase
         .from("mensualidades")
-        .select("*, client:clients(*), project:projects(id,name)")
+        .select("id,client_id,project_id,name,billing_type,fee,setup_fee,currency,status,start_date,end_date,notes,created_at,client:clients(id,name,company),project:projects(id,name)")
         .eq("project_id", params.id)
         .order("created_at"),
-      supabase.from("clients").select("*").order("name"),
-      supabase.from("saas_plans").select("*").eq("project_id", params.id).order("created_at"),
+      supabase.from("clients").select("id,name,company,status").order("name"),
+      supabase
+        .from("saas_plans")
+        .select("id,project_id,name,billing_type,fee,setup_fee,currency,description,created_at")
+        .eq("project_id", params.id)
+        .order("created_at"),
       supabase
         .from("saas_subscriptions")
-        .select("*, client:clients(*), plan:saas_plans(*)")
+        .select(
+          "id,project_id,client_id,plan_id,status,start_date,end_date,is_free,created_at,client:clients(id,name,company,status),plan:saas_plans(id,name,billing_type,fee,setup_fee,currency,description)"
+        )
         .eq("project_id", params.id)
         .order("created_at"),
     ]);
@@ -53,6 +92,9 @@ export default async function ProyectoDetailPage({ params }: Props) {
   const invoices = invoicesRes.data ?? [];
   const expenses = expensesRes.data ?? [];
   const income = incomeRes.data ?? [];
+  const expenseTotals = expenseTotalsRes.data ?? [];
+  const invoicesTotalCount = invoicesRes.count ?? 0;
+  const expensesTotalCount = expensesRes.count ?? 0;
   const mensualidades = (mensualidadesRes.data ?? []) as Mensualidad[];
   const allClients = (clientsRes.data ?? []) as Client[];
   const saasPlans = (saasPlansRes.data ?? []) as SaasPlan[];
@@ -61,9 +103,28 @@ export default async function ProyectoDetailPage({ params }: Props) {
   >;
   const subscribedClientIds = new Set(saasSubs.map((s) => s.client_id));
   const availableClientsForSaas = allClients.filter((c) => !subscribedClientIds.has(c.id));
+  const invoiceTotalPages = Math.max(1, Math.ceil(invoicesTotalCount / DETAIL_TABLE_PAGE_SIZE));
+  const expenseTotalPages = Math.max(1, Math.ceil(expensesTotalCount / DETAIL_TABLE_PAGE_SIZE));
+  const canGoToPrevInvoicePage = invoicePage > 1;
+  const canGoToNextInvoicePage = invoicePage < invoiceTotalPages;
+  const canGoToPrevExpensePage = expensePage > 1;
+  const canGoToNextExpensePage = expensePage < expenseTotalPages;
+  const invoicesRangeStart = invoicesTotalCount === 0 ? 0 : invoiceFrom + 1;
+  const invoicesRangeEnd = invoiceFrom + invoices.length;
+  const expensesRangeStart = expensesTotalCount === 0 ? 0 : expenseFrom + 1;
+  const expensesRangeEnd = expenseFrom + expenses.length;
+  const getPageHref = (kind: "invoice" | "expense", page: number) => {
+    const query = new URLSearchParams();
+    const nextInvoicePage = kind === "invoice" ? page : invoicePage;
+    const nextExpensePage = kind === "expense" ? page : expensePage;
+    if (nextInvoicePage > 1) query.set("invoicePage", String(nextInvoicePage));
+    if (nextExpensePage > 1) query.set("expensePage", String(nextExpensePage));
+    const q = query.toString();
+    return q ? `?${q}` : "";
+  };
 
-  const totalIncome = income.reduce((s: number, t: any) => s + t.amount, 0);
-  const totalExpenses = expenses.reduce((s: number, t: any) => s + t.amount, 0);
+  const totalIncome = income.reduce((sum: number, tx: any) => sum + (tx.amount ?? 0), 0);
+  const totalExpenses = expenseTotals.reduce((sum: number, tx: any) => sum + (tx.amount ?? 0), 0);
   const margin = calcMargin(totalIncome, totalExpenses);
 
   // MRR calculado desde mensualidades activas
@@ -129,11 +190,14 @@ export default async function ProyectoDetailPage({ params }: Props) {
             </p>
           )}
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/proyectos/${project.id}/editar`}>
-            <Pencil className="h-4 w-4 mr-2" />Editar
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/proyectos/${project.id}/editar`}>
+              <Pencil className="h-4 w-4 mr-2" />Editar
+            </Link>
+          </Button>
+          <DeleteProjectButton projectId={project.id} />
+        </div>
       </div>
 
       {/* KPIs */}
@@ -212,16 +276,16 @@ export default async function ProyectoDetailPage({ params }: Props) {
               </TabsTrigger>
             </>
           ) : (
-            <TabsTrigger value="mensualidades" className="gap-2">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Mensualidades ({mensualidades.length})
-            </TabsTrigger>
+              <TabsTrigger value="mensualidades" className="gap-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Mensualidades ({mensualidades.length})
+              </TabsTrigger>
           )}
           <TabsTrigger value="facturas" className="gap-2">
-            <FileText className="h-3.5 w-3.5" /> Facturas ({invoices.length})
+            <FileText className="h-3.5 w-3.5" /> Facturas ({invoicesTotalCount})
           </TabsTrigger>
           <TabsTrigger value="gastos" className="gap-2">
-            <Receipt className="h-3.5 w-3.5" /> Gastos ({expenses.length})
+            <Receipt className="h-3.5 w-3.5" /> Gastos ({expensesTotalCount})
           </TabsTrigger>
         </TabsList>
 
@@ -259,76 +323,136 @@ export default async function ProyectoDetailPage({ params }: Props) {
 
         {/* Tab Facturas */}
         <TabsContent value="facturas">
-          {invoices.length === 0 ? (
+          {invoicesTotalCount === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground border border-dashed border-border rounded-lg mt-4">
               No hay facturas para este proyecto
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden mt-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Número</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Concepto</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Total</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimiento</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv: any, i: number) => (
-                    <tr key={inv.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/10"}>
-                      <td className="px-4 py-3 font-mono text-xs">{inv.invoice_number}</td>
-                      <td className="px-4 py-3 truncate max-w-xs">{inv.concept}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-income">
-                        {formatCurrency(inv.total, inv.currency)}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.due_date)}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={inv.status === "paid" ? "success" : inv.status === "overdue" ? "error" : "warning"}>
-                          {inv.status === "paid" ? "Pagada" : inv.status === "overdue" ? "Vencida" : "Pendiente"}
-                        </Badge>
-                      </td>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-border overflow-x-auto">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Número</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Concepto</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Total</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimiento</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {invoices.map((inv: any, i: number) => (
+                      <tr key={inv.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                        <td className="px-4 py-3 font-mono text-xs">{inv.invoice_number}</td>
+                        <td className="px-4 py-3 truncate max-w-xs">{inv.concept}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-income">
+                          {formatCurrency(inv.total, inv.currency)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.due_date)}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={inv.status === "paid" ? "success" : inv.status === "overdue" ? "error" : "warning"}>
+                            {inv.status === "paid" ? "Pagada" : inv.status === "overdue" ? "Vencida" : "Pendiente"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Mostrando {invoicesRangeStart}-{invoicesRangeEnd} de {invoicesTotalCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  {canGoToPrevInvoicePage ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={getPageHref("invoice", invoicePage - 1)}>Anterior</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      Anterior
+                    </Button>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    Página {invoicePage} / {invoiceTotalPages}
+                  </span>
+                  {canGoToNextInvoicePage ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={getPageHref("invoice", invoicePage + 1)}>Siguiente</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      Siguiente
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </TabsContent>
 
         {/* Tab Gastos */}
         <TabsContent value="gastos">
-          {expenses.length === 0 ? (
+          {expensesTotalCount === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground border border-dashed border-border rounded-lg mt-4">
               No hay gastos asignados a este proyecto
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden mt-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoría</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Importe</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenses.map((exp: any, i: number) => (
-                    <tr key={exp.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/10"}>
-                      <td className="px-4 py-3 font-medium">{exp.name}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant="outline" className="font-normal">{exp.category ?? "—"}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-expense">
-                        {formatCurrency(exp.amount, exp.currency)}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatDate(exp.date)}</td>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-lg border border-border overflow-x-auto">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nombre</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoría</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Importe</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {expenses.map((exp: any, i: number) => (
+                      <tr key={exp.id} className={i % 2 === 0 ? "bg-background" : "bg-muted/10"}>
+                        <td className="px-4 py-3 font-medium">{exp.name}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="font-normal">{exp.category ?? "—"}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-expense">
+                          {formatCurrency(exp.amount, exp.currency)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDate(exp.date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Mostrando {expensesRangeStart}-{expensesRangeEnd} de {expensesTotalCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  {canGoToPrevExpensePage ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={getPageHref("expense", expensePage - 1)}>Anterior</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      Anterior
+                    </Button>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    Página {expensePage} / {expenseTotalPages}
+                  </span>
+                  {canGoToNextExpensePage ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={getPageHref("expense", expensePage + 1)}>Siguiente</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      Siguiente
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </TabsContent>

@@ -7,6 +7,7 @@ import { formatDate, isOverdue } from "@/lib/utils/dates";
 import { PlusCircle, FileText, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { MarkInvoicePaidButton } from "@/components/facturas/MarkInvoicePaidButton";
+import { ExportMenu } from "@/components/shared/ExportMenu";
 
 const invoiceStatusConfig: Record<string, { label: string; variant: any }> = {
   pending: { label: "Pendiente", variant: "warning" },
@@ -33,7 +34,7 @@ export default async function FacturasPage({ searchParams }: FacturasPageProps) 
 
   let invoicesQuery = supabase
     .from("invoices")
-    .select("id,invoice_number,concept,total,currency,issue_date,due_date,status,client:clients(name)")
+    .select("id,invoice_number,concept,amount,tax_rate,irpf_rate,total,currency,issue_date,due_date,status,payment_method,client:clients(name)")
     .order("due_date", { ascending: false });
 
   if (activeStatusFilter) {
@@ -43,6 +44,19 @@ export default async function FacturasPage({ searchParams }: FacturasPageProps) 
   const { data: invoices } = await invoicesQuery;
 
   const allInvoices = (invoices ?? []) as any[];
+  const exportRows = allInvoices.map((invoice) => ({
+    numero: invoice.invoice_number,
+    cliente: invoice.client?.name ?? "",
+    concepto: invoice.concept ?? "",
+    importe: invoice.amount ?? 0,
+    iva: invoice.tax_rate ?? 0,
+    irpf: invoice.irpf_rate ?? 0,
+    total: invoice.total ?? 0,
+    fecha_emision: invoice.issue_date ?? "",
+    fecha_vencimiento: invoice.due_date ?? "",
+    estado: invoice.status ?? "",
+    metodo_pago: invoice.payment_method ?? "",
+  }));
 
   // KPIs de facturas
   const pendingTotal = allInvoices
@@ -97,8 +111,8 @@ export default async function FacturasPage({ searchParams }: FacturasPageProps) 
       </div>
 
       {/* Header tabla */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-muted-foreground">{allInvoices.length} facturas en total</p>
           {activeStatusFilter && (
             <Badge variant={invoiceStatusConfig[activeStatusFilter]?.variant ?? "outline"}>
@@ -106,11 +120,19 @@ export default async function FacturasPage({ searchParams }: FacturasPageProps) 
             </Badge>
           )}
         </div>
-        <Button variant="gnerai" size="sm" asChild>
-          <Link href="/facturas/nueva">
-            <PlusCircle className="h-4 w-4" />Nueva factura
-          </Link>
-        </Button>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <ExportMenu
+            data={exportRows}
+            filename="facturas"
+            sheetName="Facturas"
+            buttonClassName="w-full sm:w-auto"
+          />
+          <Button variant="gnerai" size="sm" className="w-full sm:w-auto" asChild>
+            <Link href="/facturas/nueva">
+              <PlusCircle className="h-4 w-4" />Nueva factura
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Tabla de facturas */}
@@ -123,8 +145,8 @@ export default async function FacturasPage({ searchParams }: FacturasPageProps) 
           </Button>
         </div>
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Número</th>

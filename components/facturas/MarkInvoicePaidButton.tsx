@@ -9,9 +9,10 @@ import { markInvoicePaid } from "@/app/(dashboard)/facturas/actions";
 interface MarkInvoicePaidButtonProps {
   invoiceId: string;
   amount: number;
+  className?: string;
 }
 
-export function MarkInvoicePaidButton({ invoiceId, amount }: MarkInvoicePaidButtonProps) {
+export function MarkInvoicePaidButton({ invoiceId, amount, className }: MarkInvoicePaidButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleMarkPaid = async () => {
@@ -34,7 +35,7 @@ export function MarkInvoicePaidButton({ invoiceId, amount }: MarkInvoicePaidButt
       size="sm"
       onClick={handleMarkPaid}
       disabled={loading}
-      className="h-7 px-2 text-xs text-green-500 border-green-500/30 hover:bg-green-500/10 hover:text-green-400"
+      className={`h-7 px-2 text-xs text-green-500 border-green-500/30 hover:bg-green-500/10 hover:text-green-400 ${className ?? ""}`}
     >
       {loading ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />

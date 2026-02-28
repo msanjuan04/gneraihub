@@ -111,15 +111,20 @@ export function CalendarView({ events, currentYear, currentMonth }: CalendarView
   return (
     <div className="space-y-4">
       {/* Header del calendario */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold capitalize">
           {format(currentDate, "MMMM yyyy", { locale: es })}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex w-full gap-2 sm:w-auto">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigateMonth("prev")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => router.push(`/calendario?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 sm:flex-none"
+            onClick={() => router.push(`/calendario?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`)}
+          >
             Hoy
           </Button>
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => navigateMonth("next")}>
@@ -136,63 +141,61 @@ export function CalendarView({ events, currentYear, currentMonth }: CalendarView
       </div>
 
       {/* Grid del calendario */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        {/* Cabecera días */}
-        <div className="grid grid-cols-7 border-b border-border bg-muted/40">
-          {dayNames.map((day) => (
-            <div key={day} className="py-2 text-center text-xs font-medium text-muted-foreground">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Días */}
-        <div className="grid grid-cols-7">
-          {calendarDays.map((day, i) => {
-            const dateKey = format(day, "yyyy-MM-dd");
-            const dayEvents = eventsByDate[dateKey] ?? [];
-            const isCurrentMonth = isSameMonth(day, currentDate);
-            const isToday = isSameDay(day, new Date());
-            const hasEvents = dayEvents.length > 0;
-
-            const incomeEvents = dayEvents.filter((e) => e.type === "income" || e.type === "paid_income");
-            const paymentEvents = dayEvents.filter((e) => e.type === "payment" || e.type === "paid_payment");
-
-            return (
-              <div
-                key={dateKey}
-                onClick={() => handleDayClick(day)}
-                className={cn(
-                  "min-h-[100px] p-2 border-b border-r border-border/50 transition-colors",
-                  !isCurrentMonth && "opacity-40",
-                  isToday && "bg-primary/5",
-                  hasEvents && "cursor-pointer hover:bg-muted/30",
-                  // Último día de la fila sin borde derecho
-                  (i + 1) % 7 === 0 && "border-r-0"
-                )}
-              >
-                {/* Número del día */}
-                <div className={cn(
-                  "text-sm font-medium mb-1 h-6 w-6 flex items-center justify-center rounded-full",
-                  isToday && "bg-primary text-primary-foreground"
-                )}>
-                  {format(day, "d")}
-                </div>
-
-                {/* Eventos (máximo 3 visible, el resto con "...") */}
-                <div className="space-y-0.5">
-                  {dayEvents.slice(0, 3).map((event) => (
-                    <EventItem key={event.id} event={event} compact={dayEvents.length > 2} />
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <div className="text-xs text-muted-foreground pl-1">
-                      +{dayEvents.length - 3} más
-                    </div>
-                  )}
-                </div>
+      <div className="rounded-lg border border-border overflow-x-auto">
+        <div className="min-w-[720px]">
+          {/* Cabecera días */}
+          <div className="grid grid-cols-7 border-b border-border bg-muted/40">
+            {dayNames.map((day) => (
+              <div key={day} className="py-2 text-center text-xs font-medium text-muted-foreground">
+                {day}
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Días */}
+          <div className="grid grid-cols-7">
+            {calendarDays.map((day, i) => {
+              const dateKey = format(day, "yyyy-MM-dd");
+              const dayEvents = eventsByDate[dateKey] ?? [];
+              const isCurrentMonth = isSameMonth(day, currentDate);
+              const isToday = isSameDay(day, new Date());
+              const hasEvents = dayEvents.length > 0;
+
+              return (
+                <div
+                  key={dateKey}
+                  onClick={() => handleDayClick(day)}
+                  className={cn(
+                    "min-h-[100px] p-2 border-b border-r border-border/50 transition-colors",
+                    !isCurrentMonth && "opacity-40",
+                    isToday && "bg-primary/5",
+                    hasEvents && "cursor-pointer hover:bg-muted/30",
+                    (i + 1) % 7 === 0 && "border-r-0"
+                  )}
+                >
+                  {/* Número del día */}
+                  <div className={cn(
+                    "text-sm font-medium mb-1 h-6 w-6 flex items-center justify-center rounded-full",
+                    isToday && "bg-primary text-primary-foreground"
+                  )}>
+                    {format(day, "d")}
+                  </div>
+
+                  {/* Eventos (máximo 3 visible, el resto con "...") */}
+                  <div className="space-y-0.5">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <EventItem key={event.id} event={event} compact={dayEvents.length > 2} />
+                    ))}
+                    {dayEvents.length > 3 && (
+                      <div className="text-xs text-muted-foreground pl-1">
+                        +{dayEvents.length - 3} más
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

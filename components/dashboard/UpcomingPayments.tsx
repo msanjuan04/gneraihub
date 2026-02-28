@@ -92,7 +92,7 @@ export function UpcomingPayments({ events }: UpcomingPaymentsProps) {
         ) : (
           <div>
             {sortedEvents.map((event) => (
-              <EventRow key={`${event.sourceType}-${event.sourceId}`} event={event} />
+              <EventRow key={event.id} event={event} />
             ))}
           </div>
         )}

@@ -10,6 +10,10 @@ export interface Vendor {
   name: string;
   category_default: string | null;
   website: string | null;
+  email: string | null;
+  phone: string | null;
+  tax_id: string | null;
+  address: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -35,6 +39,23 @@ export interface Client {
 
 export type ClientInsert = Omit<Client, "id" | "created_at">;
 export type ClientUpdate = Partial<ClientInsert>;
+
+// ---- User settings (empresa emisora) ----
+export interface UserSettings {
+  user_id: string;
+  company_name: string | null;
+  company_tax_id: string | null;
+  company_address: string | null;
+  company_email: string | null;
+  company_phone: string | null;
+  company_logo_url: string | null;
+  accent_color: string;
+  document_language: "es" | "en";
+  updated_at: string;
+}
+
+export type UserSettingsInsert = Omit<UserSettings, "updated_at">;
+export type UserSettingsUpdate = Partial<Omit<UserSettings, "user_id" | "updated_at">>;
 
 // ---- Projects ----
 export type ProjectStatus = "active" | "paused" | "completed" | "cancelled";
@@ -231,6 +252,13 @@ export type ExpenseTransactionUpdate = Partial<ExpenseTransactionInsert>;
 // ---- Invoices (facturas emitidas) ----
 export type InvoiceStatus = "pending" | "sent" | "paid" | "overdue" | "cancelled";
 
+export interface InvoiceItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_rate: number;
+}
+
 export interface Invoice {
   id: string;
   project_id: string | null;
@@ -247,6 +275,10 @@ export interface Invoice {
   status: InvoiceStatus;
   payment_method: PaymentMethod | null;
   notes: string | null;
+  items?: InvoiceItem[];
+  converted_from_quote_id?: string | null;
+  client_address?: string | null;
+  client_tax_id?: string | null;
   created_at: string;
   // Relaciones
   client?: Client;
@@ -255,6 +287,53 @@ export interface Invoice {
 
 export type InvoiceInsert = Omit<Invoice, "id" | "created_at" | "total" | "client" | "project">;
 export type InvoiceUpdate = Partial<InvoiceInsert>;
+
+// ---- Quotes (presupuestos) ----
+export type QuoteStatus =
+  | "draft"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "expired"
+  | "invoiced";
+
+export interface QuoteItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_rate: number;
+}
+
+export interface Quote {
+  id: string;
+  user_id: string;
+  quote_number: string;
+  status: QuoteStatus;
+  potential_client_name?: string | null;
+  potential_client_email?: string | null;
+  potential_client_company?: string | null;
+  potential_client_tax_id?: string | null;
+  potential_client_address?: string | null;
+  client_id?: string | null;
+  concept: string;
+  items: QuoteItem[];
+  amount: number;
+  tax_rate: number;
+  irpf_rate: number;
+  total: number;
+  currency: Currency;
+  issue_date: string;
+  valid_until?: string | null;
+  notes?: string | null;
+  internal_notes?: string | null;
+  converted_to_invoice_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  client?: Client | null;
+}
+
+export type QuoteInsert = Omit<Quote, "id" | "created_at" | "updated_at" | "client">;
+export type QuoteUpdate = Partial<QuoteInsert>;
 
 // ---- Income Transactions (cobros reales) ----
 export interface IncomeTransaction {
@@ -268,6 +347,7 @@ export interface IncomeTransaction {
   date: string;
   payment_method: PaymentMethod | null;
   notes: string | null;
+  is_manual: boolean;
   created_at: string;
   // Relaciones
   invoice?: Invoice;
@@ -279,6 +359,8 @@ export type IncomeTransactionInsert = Omit<
   IncomeTransaction,
   "id" | "created_at" | "invoice" | "client" | "project"
 >;
+
+export type IncomeTransactionUpdate = Partial<IncomeTransactionInsert>;
 
 // ---- Tags ----
 export interface Tag {

@@ -7,9 +7,20 @@ import type { ActionResult, InvoiceInsert } from "@/types";
 export async function createInvoice(data: InvoiceInsert): Promise<ActionResult<{ id: string }>> {
   try {
     const supabase = await createClient();
+    const payload = {
+      ...data,
+      project_id: data.project_id || null,
+      notes: data.notes || null,
+      payment_method: data.payment_method || null,
+      items: Array.isArray(data.items) ? data.items : [],
+      client_address: data.client_address || null,
+      client_tax_id: data.client_tax_id || null,
+      converted_from_quote_id: data.converted_from_quote_id || null,
+    };
+
     const { data: invoice, error } = await supabase
       .from("invoices")
-      .insert({ ...data, project_id: data.project_id || null, notes: data.notes || null, payment_method: data.payment_method || null })
+      .insert(payload)
       .select("id")
       .single();
 
@@ -25,7 +36,22 @@ export async function createInvoice(data: InvoiceInsert): Promise<ActionResult<{
 export async function updateInvoice(id: string, data: Partial<InvoiceInsert>): Promise<ActionResult> {
   try {
     const supabase = await createClient();
-    const { error } = await supabase.from("invoices").update(data).eq("id", id);
+    const payload = {
+      ...data,
+      project_id: data.project_id === undefined ? undefined : data.project_id || null,
+      notes: data.notes === undefined ? undefined : data.notes || null,
+      payment_method:
+        data.payment_method === undefined ? undefined : data.payment_method || null,
+      items: data.items === undefined ? undefined : Array.isArray(data.items) ? data.items : [],
+      client_address:
+        data.client_address === undefined ? undefined : data.client_address || null,
+      client_tax_id: data.client_tax_id === undefined ? undefined : data.client_tax_id || null,
+      converted_from_quote_id:
+        data.converted_from_quote_id === undefined
+          ? undefined
+          : data.converted_from_quote_id || null,
+    };
+    const { error } = await supabase.from("invoices").update(payload).eq("id", id);
     if (error) return { success: false, error: error.message };
     revalidatePath("/facturas");
     revalidatePath(`/facturas/${id}`);
@@ -33,6 +59,33 @@ export async function updateInvoice(id: string, data: Partial<InvoiceInsert>): P
     return { success: true };
   } catch {
     return { success: false, error: "Error inesperado" };
+  }
+}
+
+export async function deleteInvoice(id: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { error: deleteIncomeError } = await supabase
+      .from("income_transactions")
+      .delete()
+      .eq("invoice_id", id);
+
+    if (deleteIncomeError) {
+      return { success: false, error: deleteIncomeError.message };
+    }
+
+    const { error } = await supabase.from("invoices").delete().eq("id", id);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/facturas");
+    revalidatePath(`/facturas/${id}`);
+    revalidatePath("/ingresos");
+    revalidatePath("/cashflow");
+    revalidatePath("/");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error inesperado al eliminar la factura" };
   }
 }
 
@@ -73,6 +126,7 @@ export async function markInvoicePaid(
         invoice_id: invoiceId,
         project_id: invoice.project_id,
         client_id: invoice.client_id,
+        is_manual: false,
         concept: `Cobro factura ${invoice.invoice_number}`,
         amount: invoice.total ?? amount,
         currency: invoice.currency,

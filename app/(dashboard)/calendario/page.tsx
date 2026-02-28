@@ -42,6 +42,7 @@ export default async function CalendarioPage({
     supabase
       .from("invoices")
       .select("id,invoice_number,total,currency,due_date,status,client:clients(name)")
+      .in("status", ["pending", "sent", "overdue"])
       .gte("due_date", rangeStartISO)
       .lte("due_date", rangeEndISO),
     supabase
@@ -61,6 +62,7 @@ export default async function CalendarioPage({
     supabase
       .from("mensualidad_payments")
       .select("mensualidad_id,payment_date,is_setup")
+      .gte("payment_date", rangeStartISO)
       .lte("payment_date", rangeEndISO),
     supabase
       .from("mensualidad_payments")

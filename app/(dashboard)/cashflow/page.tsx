@@ -3,11 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { calculateCashflow, groupExpensesByCategory } from "@/lib/utils/cashflow";
 import { getMonthRange, formatMonthLabel } from "@/lib/utils/dates";
 import { formatCurrency } from "@/lib/utils/currency";
-import { CashflowChart } from "@/components/dashboard/CashflowChart";
+import { LazyCashflowChart } from "@/components/dashboard/LazyCashflowChart";
 import { cn } from "@/lib/utils";
+import { addMonths, endOfMonth, format, startOfMonth } from "date-fns";
 
 export default async function CashflowPage() {
   const supabase = await createClient();
+  const now = new Date();
+  // 3 meses atrás + 3 hacia adelante
+  const months = getMonthRange(3, 3);
+  const rangeStart = startOfMonth(addMonths(now, -3));
+  const rangeEnd = endOfMonth(addMonths(now, 3));
+  const rangeStartISO = format(rangeStart, "yyyy-MM-dd");
+  const rangeEndISO = format(rangeEnd, "yyyy-MM-dd");
 
   const [expensesRes, expenseTransactionsRes, invoicesRes, incomeTransactionsRes, mensualidadesRes, mensualidadPaymentsRes] = await Promise.all([
     supabase
@@ -16,19 +24,29 @@ export default async function CashflowPage() {
       .eq("status", "active"),
     supabase
       .from("expense_transactions")
-      .select("date,status,amount,category"),
+      .select("date,status,amount,category")
+      .gte("date", rangeStartISO)
+      .lte("date", rangeEndISO),
     supabase
       .from("invoices")
-      .select("due_date,status,total"),
+      .select("due_date,status,total")
+      .in("status", ["pending", "sent"])
+      .gte("due_date", rangeStartISO)
+      .lte("due_date", rangeEndISO),
     supabase
       .from("income_transactions")
-      .select("date,amount"),
+      .select("date,amount")
+      .gte("date", rangeStartISO)
+      .lte("date", rangeEndISO),
     supabase
       .from("mensualidades")
-      .select("id,status,billing_type,fee,setup_fee,start_date,end_date,created_at"),
+      .select("id,status,billing_type,fee,setup_fee,start_date,end_date,created_at")
+      .eq("status", "active"),
     supabase
       .from("mensualidad_payments")
-      .select("mensualidad_id,payment_date,amount,is_setup"),
+      .select("mensualidad_id,payment_date,amount,is_setup")
+      .gte("payment_date", rangeStartISO)
+      .lte("payment_date", rangeEndISO),
   ]);
 
   const expenses = expensesRes.data ?? [];
@@ -38,8 +56,6 @@ export default async function CashflowPage() {
   const mensualidades = (mensualidadesRes.data ?? []) as any[];
   const mensualidadPayments = (mensualidadPaymentsRes.data ?? []) as any[];
 
-  // 3 meses atrás + 3 hacia adelante
-  const months = getMonthRange(3, 3);
   const cashflowData = calculateCashflow(months, {
     expenses: expenses as any,
     expenseTransactions: expenseTransactions as any,
@@ -59,7 +75,7 @@ export default async function CashflowPage() {
   return (
     <div className="space-y-6">
       {/* Gráfico principal */}
-      <CashflowChart data={cashflowData} />
+      <LazyCashflowChart data={cashflowData} />
 
       {/* Tabla mensual detallada */}
       <Card>
@@ -69,7 +85,7 @@ export default async function CashflowPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Mes</th>

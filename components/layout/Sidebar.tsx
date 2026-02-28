@@ -1,16 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Receipt,
-  FolderKanban,
-  Users,
-  FileText,
-  Wallet,
-  Calendar,
-  TrendingUp,
   Settings,
   LogOut,
   Zap,
@@ -19,51 +12,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-
-// Definición de la navegación principal
-const navItems = [
-  {
-    href: "/",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    exact: true,
-  },
-  {
-    href: "/gastos",
-    label: "Gastos",
-    icon: Receipt,
-  },
-  {
-    href: "/proyectos",
-    label: "Proyectos",
-    icon: FolderKanban,
-  },
-  {
-    href: "/clientes",
-    label: "Clientes",
-    icon: Users,
-  },
-  {
-    href: "/facturas",
-    label: "Facturas",
-    icon: FileText,
-  },
-  {
-    href: "/pagos",
-    label: "Pagos",
-    icon: Wallet,
-  },
-  {
-    href: "/calendario",
-    label: "Calendario",
-    icon: Calendar,
-  },
-  {
-    href: "/cashflow",
-    label: "Cashflow",
-    icon: TrendingUp,
-  },
-];
+import { DASHBOARD_NAV_ITEMS } from "@/components/layout/navigation";
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -72,7 +21,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -89,7 +38,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 h-screen border-r border-border/70 bg-card/85 backdrop-blur-xl flex flex-col transition-all duration-200",
+          "fixed left-0 top-0 z-40 hidden h-screen border-r border-border/70 bg-card/85 backdrop-blur-xl lg:flex flex-col transition-all duration-200",
           collapsed ? "w-16" : "w-60"
         )}
       >
@@ -111,7 +60,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
         {/* Navegación principal */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           <ul className="space-y-1">
-            {navItems.map((item) => {
+            {DASHBOARD_NAV_ITEMS.map((item) => {
               const active = isActive(item.href, item.exact);
               const Icon = item.icon;
 

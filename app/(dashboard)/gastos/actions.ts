@@ -193,6 +193,64 @@ export async function deleteExpenseTransaction(id: string): Promise<ActionResult
   }
 }
 
+export async function updateExpenseTransaction(
+  id: string,
+  data: Partial<ExpenseTransactionInsert>
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const payload = {
+      ...data,
+      vendor_id: data.vendor_id === undefined ? undefined : data.vendor_id || null,
+      project_id: data.project_id === undefined ? undefined : data.project_id || null,
+      company_expense_id:
+        data.company_expense_id === undefined ? undefined : data.company_expense_id || null,
+      receipt_url: data.receipt_url === undefined ? undefined : data.receipt_url || null,
+      notes: data.notes === undefined ? undefined : data.notes || null,
+      payment_method:
+        data.payment_method === undefined ? undefined : data.payment_method || null,
+      category: data.category === undefined ? undefined : data.category || null,
+    };
+
+    const { error } = await supabase.from("expense_transactions").update(payload).eq("id", id);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/gastos");
+    revalidatePath("/cashflow");
+    revalidatePath("/");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error inesperado al actualizar el pago" };
+  }
+}
+
+export async function deleteExpense(id: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { error: deleteTransactionsError } = await supabase
+      .from("expense_transactions")
+      .delete()
+      .eq("company_expense_id", id);
+
+    if (deleteTransactionsError) {
+      return { success: false, error: deleteTransactionsError.message };
+    }
+
+    const { error } = await supabase.from("company_expenses").delete().eq("id", id);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/gastos");
+    revalidatePath(`/gastos/${id}`);
+    revalidatePath("/cashflow");
+    revalidatePath("/");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error inesperado al eliminar el gasto" };
+  }
+}
+
 /**
  * Sube un recibo/factura a Supabase Storage y devuelve la URL.
  */
