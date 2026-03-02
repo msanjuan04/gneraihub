@@ -28,7 +28,7 @@ export default async function GastosPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("expense_transactions")
-      .select("id,name,category,amount,currency,date,status,payment_method,notes,vendor:vendors(name)")
+      .select("id,name,category,amount,currency,date,status,payment_method,notes,receipt_url,vendor:vendors(name)")
       .order("date", { ascending: false })
       .limit(50),
     supabase
@@ -256,6 +256,7 @@ export default async function GastosPage() {
                             date: t.date,
                             payment_method: t.payment_method,
                             notes: t.notes,
+                            receipt_url: t.receipt_url,
                           }}
                         />
                       </td>

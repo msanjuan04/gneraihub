@@ -28,7 +28,7 @@ export default async function EditarGastoPage({ params }: Props) {
     supabase.from("projects").select("*").eq("status", "active").order("name"),
     supabase
       .from("expense_transactions")
-      .select("id,name,amount,currency,date,status,payment_method,notes")
+      .select("id,name,amount,currency,date,status,payment_method,notes,receipt_url")
       .eq("company_expense_id", params.id)
       .order("date", { ascending: false }),
   ]);
@@ -114,6 +114,7 @@ export default async function EditarGastoPage({ params }: Props) {
                             date: transaction.date,
                             payment_method: transaction.payment_method,
                             notes: transaction.notes,
+                            receipt_url: transaction.receipt_url,
                           }}
                         />
                       </td>

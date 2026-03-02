@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Loader2, Trash2 } from "lucide-react";
+import { Pencil, Loader2, Trash2, Paperclip, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { deleteExpenseTransaction, updateExpenseTransaction } from "@/app/(dashboard)/gastos/actions";
+import {
+  deleteExpenseTransaction,
+  updateExpenseTransaction,
+  uploadReceipt,
+} from "@/app/(dashboard)/gastos/actions";
 import type { PaymentMethod } from "@/types";
 
 interface ExpenseTransactionActionsProps {
@@ -36,6 +40,7 @@ interface ExpenseTransactionActionsProps {
     date: string;
     payment_method?: PaymentMethod | null;
     notes?: string | null;
+    receipt_url?: string | null;
   };
 }
 
@@ -49,6 +54,7 @@ export function ExpenseTransactionActions({ transaction }: ExpenseTransactionAct
     transaction.payment_method ?? "none"
   );
   const [notes, setNotes] = useState(transaction.notes ?? "");
+  const [file, setFile] = useState<File | null>(null);
 
   const handleSave = async () => {
     const parsedAmount = Number.parseFloat(amount);
@@ -63,21 +69,44 @@ export function ExpenseTransactionActions({ transaction }: ExpenseTransactionAct
     }
 
     setLoadingEdit(true);
-    const result = await updateExpenseTransaction(transaction.id, {
-      amount: parsedAmount,
-      date,
-      payment_method: paymentMethod === "none" ? null : paymentMethod,
-      notes: notes.trim() || null,
-    });
-    setLoadingEdit(false);
+    try {
+      let receiptUrl = transaction.receipt_url ?? null;
 
-    if (!result.success) {
-      toast.error("No se pudo actualizar el pago", { description: result.error });
-      return;
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadResult = await uploadReceipt(formData);
+
+        if (!uploadResult.success || !uploadResult.data?.url) {
+          toast.error("No se pudo subir la factura/recibo", {
+            description: uploadResult.error,
+          });
+          setLoadingEdit(false);
+          return;
+        }
+
+        receiptUrl = uploadResult.data.url;
+      }
+
+      const result = await updateExpenseTransaction(transaction.id, {
+        amount: parsedAmount,
+        date,
+        payment_method: paymentMethod === "none" ? null : paymentMethod,
+        notes: notes.trim() || null,
+        receipt_url: receiptUrl,
+      });
+
+      if (!result.success) {
+        toast.error("No se pudo actualizar el pago", { description: result.error });
+        setLoadingEdit(false);
+        return;
+      }
+
+      toast.success("Pago actualizado");
+      setEditOpen(false);
+    } finally {
+      setLoadingEdit(false);
     }
-
-    toast.success("Pago actualizado");
-    setEditOpen(false);
   };
 
   const handleDelete = async () => {
@@ -188,6 +217,32 @@ export function ExpenseTransactionActions({ transaction }: ExpenseTransactionAct
                 onChange={(event) => setNotes(event.target.value)}
                 className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expense-transaction-receipt">Factura/recibo</Label>
+              <div className="flex flex-col gap-2">
+                <Input
+                  id="expense-transaction-receipt"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(event) => {
+                    const selectedFile = event.target.files?.[0] ?? null;
+                    setFile(selectedFile);
+                  }}
+                />
+                {transaction.receipt_url && (
+                  <a
+                    href={transaction.receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-xs text-primary hover:underline"
+                  >
+                    <Paperclip className="mr-1 h-3 w-3" />
+                    Ver archivo actual
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 

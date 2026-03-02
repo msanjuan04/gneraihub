@@ -31,6 +31,36 @@ export async function createExpense(
 
     if (error) return { success: false, error: error.message };
 
+    // Si el gasto es puntual (one_off), registramos también una transacción de gasto
+    // para que aparezca en la pestaña de "Variables" y en los totales.
+    if (data.interval === "one_off" && expense?.id) {
+      const transactionPayload: ExpenseTransactionInsert = {
+        company_expense_id: expense.id,
+        vendor_id: data.vendor_id || null,
+        project_id: data.project_id || null,
+        name: data.name,
+        category: data.category || null,
+        amount: data.amount,
+        currency: data.currency,
+        date:
+          data.billing_date ||
+          data.start_date ||
+          new Date().toISOString().split("T")[0],
+        status: "pending",
+        payment_method: data.payment_method || null,
+        receipt_url: null,
+        notes: data.notes || null,
+      };
+
+      const { error: transactionError } = await supabase
+        .from("expense_transactions")
+        .insert(transactionPayload);
+
+      if (transactionError) {
+        return { success: false, error: transactionError.message };
+      }
+    }
+
     revalidatePath("/gastos");
     revalidatePath("/");
     return { success: true, data: { id: expense.id } };
