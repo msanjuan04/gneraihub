@@ -4,6 +4,7 @@ import {
   ClipboardList,
   FileText,
   FolderKanban,
+  Key,
   LayoutDashboard,
   Percent,
   Receipt,
@@ -62,6 +63,11 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     icon: Percent,
   },
   {
+    href: "/accesos",
+    label: "Accesos",
+    icon: Key,
+  },
+  {
     href: "/calendario",
     label: "Calendario",
     icon: Calendar,
@@ -87,6 +93,7 @@ export const DASHBOARD_PAGE_INFO: Record<string, { title: string; description: s
   },
   "/ingresos": { title: "Ingresos", description: "Histórico de ingresos de factura y manuales" },
   "/desgloses": { title: "Desgloses", description: "A qué subcuenta va cada ingreso (gastos fijos, beneficio, marketing, imprevistos)" },
+  "/accesos": { title: "Accesos", description: "Correos y contraseñas por sitio, con nota de para qué sirve cada uno" },
   "/calendario": { title: "Calendario", description: "Vista unificada de cobros y pagos" },
   "/cashflow": { title: "Cashflow", description: "Flujo de caja previsto vs real" },
   "/ajustes": { title: "Ajustes", description: "Configuración general de la aplicación" },

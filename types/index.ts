@@ -57,6 +57,21 @@ export interface UserSettings {
 export type UserSettingsInsert = Omit<UserSettings, "updated_at">;
 export type UserSettingsUpdate = Partial<Omit<UserSettings, "user_id" | "updated_at">>;
 
+// ---- Saved credentials (accesos: sitio, correo, contraseña, para qué sirve) ----
+export interface SavedCredential {
+  id: string;
+  user_id: string;
+  site: string;
+  email: string;
+  password: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SavedCredentialInsert = Omit<SavedCredential, "id" | "created_at" | "updated_at">;
+export type SavedCredentialUpdate = Partial<Omit<SavedCredentialInsert, "user_id">>;
+
 // ---- Projects ----
 export type ProjectStatus = "active" | "paused" | "completed" | "cancelled";
 export type ProjectType = "web" | "app" | "marketing" | "consulting" | "ecommerce" | "otro";

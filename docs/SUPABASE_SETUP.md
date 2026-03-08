@@ -46,7 +46,8 @@ En **Supabase Dashboard → SQL Editor**, ejecuta las migraciones en este orden:
 10. `010_income_transactions_manual.sql`
 11. `011_vendors_contact_fields.sql`
 12. `012_logos_storage_bucket.sql`
-13. **`013_receipts_storage_bucket.sql`** ← necesario para subir PDFs de facturas en Gastos
+13. **`013_receipts_storage_bucket.sql`** ← necesario para subir PDFs de facturas en Gastos  
+14. **`014_saved_credentials.sql`** ← tabla para la sección Accesos (correos y contraseñas)
 
 ---
 
