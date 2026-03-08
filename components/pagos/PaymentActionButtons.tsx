@@ -8,7 +8,7 @@ import {
   deleteMensualidadPayment,
   registerMensualidadPayment,
   updateMensualidadPayment,
-} from "@/app/(dashboard)/pagos/actions";
+} from "@/app/(dashboard)/ingresos/actions";
 import {
   Dialog,
   DialogContent,

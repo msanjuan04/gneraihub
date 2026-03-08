@@ -18,13 +18,12 @@ interface Props {
 export default async function EditarGastoPage({ params }: Props) {
   const supabase = await createClient();
 
-  const [expenseRes, vendorsRes, projectsRes, transactionsRes] = await Promise.all([
+  const [expenseRes, projectsRes, transactionsRes] = await Promise.all([
     supabase
       .from("company_expenses")
-      .select("*, vendor:vendors(*), project:projects(*)")
+      .select("*, project:projects(*)")
       .eq("id", params.id)
       .single(),
-    supabase.from("vendors").select("*").order("name"),
     supabase.from("projects").select("*").eq("status", "active").order("name"),
     supabase
       .from("expense_transactions")
@@ -66,7 +65,6 @@ export default async function EditarGastoPage({ params }: Props) {
 
       <ExpenseForm
         expense={expense}
-        vendors={vendorsRes.data ?? []}
         projects={projectsRes.data ?? []}
       />
 

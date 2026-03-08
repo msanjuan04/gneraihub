@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { createExpense, updateExpense } from "@/app/(dashboard)/gastos/actions";
-import type { CompanyExpense, CompanyExpenseInsert, Vendor, Project } from "@/types";
+import type { CompanyExpense, CompanyExpenseInsert, Project } from "@/types";
 
 // Esquema de validación Zod
 const expenseSchema = z.object({
@@ -62,11 +62,10 @@ type ExpenseFormData = {
 
 interface ExpenseFormProps {
   expense?: CompanyExpense;
-  vendors: Vendor[];
   projects: Project[];
 }
 
-export function ExpenseForm({ expense, vendors, projects }: ExpenseFormProps) {
+export function ExpenseForm({ expense, projects }: ExpenseFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const isEditing = !!expense;
@@ -169,27 +168,6 @@ export function ExpenseForm({ expense, vendors, projects }: ExpenseFormProps) {
                     </SelectItem>
                   )
                 )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Proveedor */}
-          <div className="space-y-2">
-            <Label>Proveedor</Label>
-            <Select
-              defaultValue={expense?.vendor_id ?? "none"}
-              onValueChange={(v) => setValue("vendor_id", v === "none" ? null : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar proveedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sin proveedor</SelectItem>
-                {vendors.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.name}
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
           </div>

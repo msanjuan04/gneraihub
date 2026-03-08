@@ -13,6 +13,7 @@ import { DocumentTemplate } from "@/components/documents/DocumentTemplate";
 import { DocumentPdfDownloadButton } from "@/components/documents/DocumentPdfDownloadButton";
 import { MarkInvoicePaidButton } from "@/components/facturas/MarkInvoicePaidButton";
 import { DeleteInvoiceButton } from "@/components/facturas/DeleteInvoiceButton";
+import { AllocationBreakdown } from "@/components/shared/AllocationBreakdown";
 import type { UserSettings } from "@/types";
 
 const statusConfig: Record<string, any> = {
@@ -147,7 +148,19 @@ export default async function FacturaDetailPage({ params }: Props) {
         </Card>
       ) : null}
 
-      <DocumentTemplate {...templateProps} />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <DocumentTemplate {...templateProps} />
+        </div>
+        <div>
+          <AllocationBreakdown
+            amount={invoice.total ?? totals.total}
+            currency={invoice.currency}
+            totalIncluyeIva={true}
+            title="Desglose por subcuentas"
+          />
+        </div>
+      </div>
     </div>
   );
 }

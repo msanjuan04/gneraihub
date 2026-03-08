@@ -1,15 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Building2,
   Calendar,
   ClipboardList,
   FileText,
   FolderKanban,
   LayoutDashboard,
+  Percent,
   Receipt,
   TrendingUp,
   Users,
-  Wallet,
   HandCoins,
 } from "lucide-react";
 
@@ -43,11 +42,6 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     icon: Users,
   },
   {
-    href: "/proveedores",
-    label: "Proveedores",
-    icon: Building2,
-  },
-  {
     href: "/facturas",
     label: "Facturas",
     icon: FileText,
@@ -58,14 +52,14 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     icon: ClipboardList,
   },
   {
-    href: "/pagos",
-    label: "Pagos",
-    icon: Wallet,
-  },
-  {
     href: "/ingresos",
     label: "Ingresos",
     icon: HandCoins,
+  },
+  {
+    href: "/desgloses",
+    label: "Desgloses",
+    icon: Percent,
   },
   {
     href: "/calendario",
@@ -79,21 +73,20 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   },
 ];
 
-export const MOBILE_PRIMARY_NAV_PATHS = ["/", "/gastos", "/facturas", "/pagos"];
+export const MOBILE_PRIMARY_NAV_PATHS = ["/", "/gastos", "/facturas", "/ingresos"];
 
 export const DASHBOARD_PAGE_INFO: Record<string, { title: string; description: string }> = {
   "/": { title: "Dashboard", description: "Resumen financiero y operativo" },
   "/gastos": { title: "Gastos", description: "Gestión de gastos recurrentes y variables" },
   "/proyectos": { title: "Proyectos", description: "Proyectos activos y su rentabilidad" },
   "/clientes": { title: "Clientes", description: "Base de clientes y su historial" },
-  "/proveedores": { title: "Proveedores", description: "Gestión de proveedores y gastos asociados" },
   "/facturas": { title: "Facturas", description: "Facturación y cobros pendientes" },
   "/presupuestos": {
     title: "Presupuestos",
     description: "Propuestas comerciales y conversión a factura",
   },
-  "/pagos": { title: "Pagos", description: "Cobros realizados y próximos vencimientos" },
   "/ingresos": { title: "Ingresos", description: "Histórico de ingresos de factura y manuales" },
+  "/desgloses": { title: "Desgloses", description: "A qué subcuenta va cada ingreso (gastos fijos, beneficio, marketing, imprevistos)" },
   "/calendario": { title: "Calendario", description: "Vista unificada de cobros y pagos" },
   "/cashflow": { title: "Cashflow", description: "Flujo de caja previsto vs real" },
   "/ajustes": { title: "Ajustes", description: "Configuración general de la aplicación" },

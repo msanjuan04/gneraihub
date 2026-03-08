@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubscriptionTable } from "@/components/gastos/SubscriptionTable";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getCurrentMonthRange } from "@/lib/utils/dates";
-import { PlusCircle, TrendingDown, RefreshCcw, Receipt } from "lucide-react";
+import { PlusCircle, TrendingDown, RefreshCcw, Receipt, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExpenseTransactionActions } from "@/components/gastos/ExpenseTransactionActions";
@@ -24,13 +24,13 @@ export default async function GastosPage() {
   const [expensesRes, transactionsRes, monthTotalsRes] = await Promise.all([
     supabase
       .from("company_expenses")
-      .select("id,name,category,amount,currency,interval,billing_day,billing_date,start_date,end_date,status,vendor:vendors(name)")
+      .select("id,name,category,amount,currency,interval,billing_day,billing_date,start_date,end_date,status")
       .order("created_at", { ascending: false }),
     supabase
       .from("expense_transactions")
-      .select("id,name,category,amount,currency,date,status,payment_method,notes,receipt_url,vendor:vendors(name)")
+      .select("id,name,category,amount,currency,date,status,payment_method,notes,receipt_url")
       .order("date", { ascending: false })
-      .limit(50),
+      .limit(100),
     supabase
       .from("expense_transactions")
       .select("amount")
@@ -59,7 +59,6 @@ export default async function GastosPage() {
     categoria: expense.category ?? "",
     importe: expense.amount ?? 0,
     frecuencia: expense.interval ?? "",
-    proveedor: expense.vendor?.name ?? "",
     estado: expense.status ?? "",
   }));
   const variablesExportRows = transactions.map((transaction) => ({
@@ -67,7 +66,6 @@ export default async function GastosPage() {
     categoria: transaction.category ?? "",
     importe: transaction.amount ?? 0,
     fecha: transaction.date,
-    proveedor: transaction.vendor?.name ?? "",
     metodo_pago: transaction.payment_method ?? "",
   }));
 
@@ -205,6 +203,9 @@ export default async function GastosPage() {
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">
                       Estado
                     </th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">
+                      Factura
+                    </th>
                     <th className="px-4 py-3 w-24" />
                   </tr>
                 </thead>
@@ -219,12 +220,7 @@ export default async function GastosPage() {
                       }
                     >
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium">{t.name}</p>
-                          {t.vendor?.name && (
-                            <p className="text-xs text-muted-foreground">{t.vendor.name}</p>
-                          )}
-                        </div>
+                        <p className="font-medium">{t.name}</p>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         {t.category ? (
@@ -247,6 +243,21 @@ export default async function GastosPage() {
                         <Badge variant={t.status === "paid" ? "success" : "warning"}>
                           {t.status === "paid" ? "Pagado" : "Pendiente"}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        {t.receipt_url ? (
+                          <a
+                            href={t.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            Ver PDF
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <ExpenseTransactionActions

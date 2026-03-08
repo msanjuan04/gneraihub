@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 export default async function NuevoGastoPage() {
   const supabase = await createClient();
 
-  const [vendorsRes, projectsRes] = await Promise.all([
-    supabase.from("vendors").select("*").order("name"),
-    supabase.from("projects").select("*").eq("status", "active").order("name"),
-  ]);
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("status", "active")
+    .order("name");
 
   return (
     <div className="space-y-6">
@@ -28,10 +29,7 @@ export default async function NuevoGastoPage() {
         </div>
       </div>
 
-      <ExpenseForm
-        vendors={vendorsRes.data ?? []}
-        projects={projectsRes.data ?? []}
-      />
+      <ExpenseForm projects={projects ?? []} />
     </div>
   );
 }

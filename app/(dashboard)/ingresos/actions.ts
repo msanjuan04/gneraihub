@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { ActionResult, Currency, IncomeTransactionInsert, PaymentMethod } from "@/types";
+import { getNextMensualidadDue } from "@/lib/utils/mensualidades";
+import type {
+  ActionResult,
+  Currency,
+  IncomeTransactionInsert,
+  MensualidadPaymentInsert,
+  PaymentMethod,
+} from "@/types";
 
 type CreateIncomeInput = {
   concept: string;
@@ -17,7 +24,6 @@ type CreateIncomeInput = {
 
 function revalidateIncomePaths() {
   revalidatePath("/ingresos");
-  revalidatePath("/pagos");
   revalidatePath("/cashflow");
   revalidatePath("/");
 }
@@ -135,5 +141,123 @@ export async function deleteIncomeTransaction(id: string): Promise<ActionResult>
     return { success: true };
   } catch {
     return { success: false, error: "Error inesperado al eliminar el ingreso" };
+  }
+}
+
+// ----- Cobros de mensualidades (antes en /pagos) -----
+
+export async function registerMensualidadPayment({
+  mensualidadId,
+  paymentDate,
+}: {
+  mensualidadId: string;
+  paymentDate: string;
+}): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { data: mensualidad, error: mensError } = await supabase
+      .from("mensualidades")
+      .select("id,client_id,project_id,fee,setup_fee,currency,billing_type,status,start_date,end_date,created_at")
+      .eq("id", mensualidadId)
+      .single();
+
+    if (mensError || !mensualidad) {
+      return { success: false, error: "Mensualidad no encontrada" };
+    }
+
+    const { data: existingPayments } = await supabase
+      .from("mensualidad_payments")
+      .select("payment_date,is_setup")
+      .eq("mensualidad_id", mensualidadId);
+
+    const due = getNextMensualidadDue(
+      mensualidad as any,
+      (existingPayments ?? []) as { payment_date: string; is_setup: boolean }[]
+    );
+
+    if (!due) {
+      return { success: false, error: "No hay cobro pendiente para esta mensualidad" };
+    }
+
+    const dueDateStr = due.dueDate.toISOString().split("T")[0];
+    if (dueDateStr !== paymentDate) {
+      return { success: false, error: "La fecha no coincide con el vencimiento pendiente" };
+    }
+
+    const baseInsert: Omit<MensualidadPaymentInsert, "amount" | "is_setup"> = {
+      mensualidad_id: mensualidadId,
+      client_id: mensualidad.client_id ?? null,
+      project_id: mensualidad.project_id ?? null,
+      payment_date: paymentDate,
+      currency: (mensualidad.currency as Currency) ?? "EUR",
+      payment_method: null,
+      notes: null,
+    };
+
+    if (due.setupPending && mensualidad.setup_fee && mensualidad.setup_fee > 0) {
+      const { error: setupErr } = await supabase.from("mensualidad_payments").insert({
+        ...baseInsert,
+        amount: mensualidad.setup_fee,
+        is_setup: true,
+      });
+      if (setupErr) return { success: false, error: setupErr.message };
+    }
+
+    const { error: feeErr } = await supabase.from("mensualidad_payments").insert({
+      ...baseInsert,
+      amount: mensualidad.fee,
+      is_setup: false,
+    });
+
+    if (feeErr) return { success: false, error: feeErr.message };
+
+    revalidateIncomePaths();
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al registrar el cobro" };
+  }
+}
+
+export async function updateMensualidadPayment(
+  paymentId: string,
+  data: {
+    payment_date?: string;
+    amount?: number;
+    payment_method?: PaymentMethod | null;
+    notes?: string | null;
+  }
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const payload: Record<string, unknown> = {};
+    if (data.payment_date != null) payload.payment_date = data.payment_date;
+    if (data.amount != null) payload.amount = data.amount;
+    if (data.payment_method !== undefined) payload.payment_method = data.payment_method;
+    if (data.notes !== undefined) payload.notes = data.notes?.trim() || null;
+
+    const { error } = await supabase
+      .from("mensualidad_payments")
+      .update(payload)
+      .eq("id", paymentId);
+
+    if (error) return { success: false, error: error.message };
+    revalidateIncomePaths();
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al actualizar el cobro" };
+  }
+}
+
+export async function deleteMensualidadPayment(paymentId: string): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.from("mensualidad_payments").delete().eq("id", paymentId);
+    if (error) return { success: false, error: error.message };
+    revalidateIncomePaths();
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al eliminar el cobro" };
   }
 }

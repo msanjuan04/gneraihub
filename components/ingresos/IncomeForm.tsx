@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AllocationBreakdown } from "@/components/shared/AllocationBreakdown";
 import type { Currency, PaymentMethod } from "@/types";
 
 const schema = z.object({
@@ -50,6 +51,8 @@ export function IncomeForm({ clients, projects }: IncomeFormProps) {
   });
 
   const selectedClient = watch("client_id");
+  const amount = watch("amount");
+  const currency = watch("currency") as Currency;
   const filteredProjects = useMemo(() => {
     if (!selectedClient) return projects;
     return projects.filter((project) => !project.client_id || project.client_id === selectedClient);
@@ -92,6 +95,17 @@ export function IncomeForm({ clients, projects }: IncomeFormProps) {
         <Input id="amount" type="number" min="0" step="0.01" {...register("amount")} />
         {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
       </div>
+
+      {amount > 0 ? (
+        <div className="sm:col-span-2">
+          <AllocationBreakdown
+            amount={Number(amount)}
+            currency={currency}
+            totalIncluyeIva={true}
+            title="Desglose por subcuentas (IVA 21%, IRPF 7%, reparto 40/30/25/15)"
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>Divisa</Label>
